@@ -256,77 +256,6 @@ static void csched_tick(void *_cpu);
 static void csched_acct(void *dummy);
 static inline void __runq_tickle(struct csched_vcpu *new);
 
-//mcc
-static void
-MCS_tick(void *_vc)
-{
-    struct vcpu *vc  = (struct vcpu *)_vc;
-    struct csched_vcpu *  svc = CSCHED_VCPU(vc);
-    struct csched_dom * sdom;
-    unsigned int cpu = vc->processor;
-    struct csched_pcpu *spc = CSCHED_PCPU(cpu);
-    int prev_pri = svc->pri;
-
-    if( is_idle_vcpu(vc))
-        return;
-
-    sdom = svc->sdom;
-    svc->mcc_wcet_1 = MICROSECS( sdom->mcc_wcet_1);
-    svc->mcc_wcet_2 = MICROSECS(sdom->mcc_wcet_2);
-    svc->mcc_crit_level = sdom->mcc_crit_level;
-    svc->mcc_period= sdom->mcc_period;
-
-    if (svc->mcc_crit_level == 2 )
-    {
-        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
-        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);// fixme
-
-    }
-    else
-    {
-        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
-        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);
-
-    }
-
-    svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-
-   // svc->MCS_elapsed_time = 0; // fixme
-
-   // if( is_idle_vcpu(vc))
-    //    return;  // should  I kill the timer here
-
-    // if ( (curr_on_cpu(vc->processor) == vc) )
-    // {
-
-
-
-    // return;
-    // }
-   // if ( (__vcpu_on_runq(svc)) )
-   // {
-     //   if (prev_pri !=  svc->pri) // fixme
-     //   {
-      //      __runq_remove(svc);
-     //       __runq_insert(svc);
-      //  }
-    //}
-
-    //   if ( likely(vcpu_runnable(vc)) )
-    //       SCHED_STAT_CRANK(vcpu_wake_runnable);
-    //   else
-    //     SCHED_STAT_CRANK(vcpu_wake_not_runnable);
-
-
-
-    //if ( svc->MCS_temperature >= 1)
-      //  spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
-
-
-
-    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    __runq_tickle(svc);// fixme it was before set-timer in the first version
-}
 
 
 
@@ -590,6 +519,81 @@ static inline void __runq_tickle(struct csched_vcpu *new)
     else
         SCHED_STAT_CRANK(tickled_no_cpu);
 }
+
+
+
+//mcc
+static void
+MCS_tick(void *_vc)
+{
+    struct vcpu *vc  = (struct vcpu *)_vc;
+    struct csched_vcpu *  svc = CSCHED_VCPU(vc);
+    struct csched_dom * sdom;
+    // unsigned int cpu = vc->processor;
+    // struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+
+
+    if( is_idle_vcpu(vc))
+        return;
+
+    sdom = svc->sdom;
+    svc->mcc_wcet_1 = MICROSECS( sdom->mcc_wcet_1);
+    svc->mcc_wcet_2 = MICROSECS(sdom->mcc_wcet_2);
+    svc->mcc_crit_level = sdom->mcc_crit_level;
+    svc->mcc_period= sdom->mcc_period;
+
+    if (svc->mcc_crit_level == 2 )
+    {
+        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);// fixme
+
+    }
+    else
+    {
+        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);
+
+    }
+
+    svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+
+    // svc->MCS_elapsed_time = 0; // fixme
+
+    // if( is_idle_vcpu(vc))
+    //    return;  // should  I kill the timer here
+
+    // if ( (curr_on_cpu(vc->processor) == vc) )
+    // {
+
+
+
+    // return;
+    // }
+    // if ( (__vcpu_on_runq(svc)) )
+    // {
+    //   if (prev_pri !=  svc->pri) // fixme
+    //   {
+    //      __runq_remove(svc);
+    //       __runq_insert(svc);
+    //  }
+    //}
+
+    //   if ( likely(vcpu_runnable(vc)) )
+    //       SCHED_STAT_CRANK(vcpu_wake_runnable);
+    //   else
+    //     SCHED_STAT_CRANK(vcpu_wake_not_runnable);
+
+
+
+    //if ( svc->MCS_temperature >= 1)
+    //  spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
+
+
+
+    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
+    __runq_tickle(svc);// fixme it was before set-timer in the first version
+}
+
 
 static void
 csched_free_pdata(const struct scheduler *ops, void *pcpu, int cpu)
