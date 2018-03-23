@@ -249,6 +249,13 @@ struct csched_private {
     struct timer master_ticker;
 };
 
+
+
+
+static void csched_tick(void *_cpu);
+static void csched_acct(void *dummy);
+static inline void __runq_tickle(struct csched_vcpu *new);
+
 //mcc
 static void
 MCS_tick(void *_vc)
@@ -326,8 +333,7 @@ MCS_tick(void *_vc)
 
 
 
-static void csched_tick(void *_cpu);
-static void csched_acct(void *dummy);
+
 
 static inline int
 __vcpu_on_runq(struct csched_vcpu *svc)
