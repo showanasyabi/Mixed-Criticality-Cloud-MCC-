@@ -1742,8 +1742,8 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
     ASSERT(peer_pcpu != NULL);
 
 
-     * Don't steal from an idle CPU's runq because it's about to
-     * pick up work from it itself.
+     /* Don't steal from an idle CPU's runq because it's about to
+     * pick up work from it itself.*/
 
     if ( unlikely(is_idle_vcpu(curr_on_cpu(peer_cpu))) )
         goto out;
@@ -1753,18 +1753,18 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
         speer = __runq_elem(iter);
 
 
-         * If next available VCPU here is not of strictly higher
-         * priority than ours, this PCPU is useless to us.
+         /* If next available VCPU here is not of strictly higher
+         * priority than ours, this PCPU is useless to us.*/
 
         if ( speer->pri <= pri )
             break;
 
-         Is this VCPU runnable on our PCPU?
+//         Is this VCPU runnable on our PCPU?
         vc = speer->vcpu;
         BUG_ON( is_idle_vcpu(vc) );
 
 
-         * If the vcpu is still in peer_cpu's scheduling tail, or if it
+       /* * If the vcpu is still in peer_cpu's scheduling tail, or if it
          * has no useful soft affinity, skip it.
          *
          * In fact, what we want is to check if we have any "soft-affine
@@ -1775,7 +1775,7 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
          * a soft balancing step in the first place. This, for instance,
          * can be implemented by taking note of on what runq there are
          * vCPUs with useful soft affinities in some sort of bitmap
-         * or counter.
+         * or counter.*/
 
         if ( vc->is_running ||
              (balance_step == BALANCE_SOFT_AFFINITY
@@ -1785,7 +1785,7 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
         affinity_balance_cpumask(vc, balance_step, cpumask_scratch);
         if ( __csched_vcpu_is_migrateable(vc, cpu, cpumask_scratch) )
         {
-             We got a candidate. Grab it!
+             /*We got a candidate. Grab it! */
             TRACE_3D(TRC_CSCHED_STOLEN_VCPU, peer_cpu,
                      vc->domain->domain_id, vc->vcpu_id);
             SCHED_VCPU_STAT_CRANK(speer, migrate_q);
@@ -1794,9 +1794,9 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
             runq_remove(speer);
             vc->processor = cpu;
 
-             * speer will start executing directly on cpu, without having to
+           /*  * speer will start executing directly on cpu, without having to
              * go through runq_insert(). So we must update the runnable count
-             * for cpu here.
+             * for cpu here.*/
 
             inc_nr_runnable(cpu);
             return speer;
@@ -1822,8 +1822,8 @@ csched_load_balance(struct csched_private *prv, int cpu,
     online = cpupool_online_cpumask(c);
 
 
-     * If this CPU is going offline, or is not (yet) part of any cpupool
-     * (as it happens, e.g., during cpu bringup), we shouldn't steal work.
+     /** If this CPU is going offline, or is not (yet) part of any cpupool
+     * (as it happens, e.g., during cpu bringup), we shouldn't steal work.*/
 
     if ( unlikely(!cpumask_test_cpu(cpu, online) || c == NULL) )
         goto out;
@@ -1836,21 +1836,21 @@ csched_load_balance(struct csched_private *prv, int cpu,
         SCHED_STAT_CRANK(load_balance_other);
 
 
-     * Let's look around for work to steal, taking both hard affinity
+   /*  * Let's look around for work to steal, taking both hard affinity
      * and soft affinity into account. More specifically, we check all
      * the non-idle CPUs' runq, looking for:
      *  1. any "soft-affine work" to steal first,
-     *  2. if not finding anything, any "hard-affine work" to steal.
+     *  2. if not finding anything, any "hard-affine work" to steal.*/
 
     for_each_affinity_balance_step( bstep )
     {
 
-         * We peek at the non-idling CPUs in a node-wise fashion. In fact,
+       /*  * We peek at the non-idling CPUs in a node-wise fashion. In fact,
          * it is more likely that we find some affine work on our same
          * node, not to mention that migrating vcpus within the same node
          * could well expected to be cheaper than across-nodes (memory
          * stays local, there might be some node-wide cache[s], etc.).
-
+*/
         peer_node = node;
         do
         {
@@ -1868,7 +1868,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
                 spinlock_t *lock;
 
 
-                 * If there is only one runnable vCPU on peer_cpu, it means
+                /* * If there is only one runnable vCPU on peer_cpu, it means
                  * there's no one to be stolen in its runqueue, so skip it.
                  *
                  * Checking this without holding the lock is racy... But that's
@@ -1891,7 +1891,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
                  *     until someone else tries to steal it again. But this is
                  *     no worse than what can happen already (without this
                  *     optimization), it the pCPU would schedule right after we
-                 *     have taken the lock, and hence block on it.
+                 *     have taken the lock, and hence block on it.*/
 
                 if ( CSCHED_PCPU(peer_cpu)->nr_runnable <= 1 )
                 {
@@ -1900,11 +1900,11 @@ csched_load_balance(struct csched_private *prv, int cpu,
                 }
 
 
-                 * Get ahold of the scheduler lock for this peer CPU.
+                /* * Get ahold of the scheduler lock for this peer CPU.
                  *
                  * Note: We don't spin on this lock but simply try it. Spinning
                  * could cause a deadlock if the peer CPU is also load
-                 * balancing and trying to lock this CPU.
+                 * balancing and trying to lock this CPU.*/
 
                 lock = pcpu_schedule_trylock(peer_cpu);
                 SCHED_STAT_CRANK(steal_trylock);
@@ -1917,19 +1917,19 @@ csched_load_balance(struct csched_private *prv, int cpu,
 
                 TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  checked  1);
 
-                 Any work over there to steal?
+             /*    Any work over there to steal?*/
                 speer = cpumask_test_cpu(peer_cpu, online) ?
                     csched_runq_steal(peer_cpu, cpu, snext->pri, bstep) : NULL;
                 pcpu_schedule_unlock(lock, peer_cpu);
 
-                 As soon as one vcpu is found, balancing ends
+                /* As soon as one vcpu is found, balancing ends*/
                 if ( speer != NULL )
                 {
                     *stolen = 1;
 
-                     * Next time we'll look for work to steal on this node, we
+                    /* * Next time we'll look for work to steal on this node, we
                      * will start from the next pCPU, with respect to this one,
-                     * so we don't risk stealing always from the same ones.
+                     * so we don't risk stealing always from the same ones.*/
 
                     prv->balance_bias[peer_node] = peer_cpu;
                     return speer;
@@ -1946,7 +1946,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
     }
 
  out:
-     Failed to find more important work elsewhere...
+   /*  Failed to find more important work elsewhere...*/
     __runq_remove(snext);
     return snext;
 }
