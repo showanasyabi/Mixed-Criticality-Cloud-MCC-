@@ -591,7 +591,7 @@ mcc_tick(void *_vc)
 
 
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    __runq_tickle(svc);// fixme it was before set-timer in the first version
+    //__runq_tickle(svc);// fixme it was before set-timer in the first version
 }
 
 
@@ -1413,6 +1413,11 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
     INIT_LIST_HEAD(&sdom->active_sdom_elem);
     sdom->dom = dom;
     sdom->weight = CSCHED_DEFAULT_WEIGHT;
+    sdom->mcc_crit_level = 1; // shoud we define this as a constant // fixme
+    sdom->mcc_period = MICROSECS(100000);
+    sdom->mcc_wcet_1 = MICROSECS(30000);
+    sdom->mcc_wcet_2= MICROSECS(400000);
+    
 
     return (void *)sdom;
 }
@@ -1895,7 +1900,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
 
                 if ( CSCHED_PCPU(peer_cpu)->nr_runnable <= 1 )
                 {
-                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skip  0);
+                    //TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skip  0);
                     goto next_cpu;
                 }
 
@@ -1911,11 +1916,11 @@ csched_load_balance(struct csched_private *prv, int cpu,
                 if ( !lock )
                 {
                     SCHED_STAT_CRANK(steal_trylock_failed);
-                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skip  0);
+                   // TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skip  0);
                     goto next_cpu;
                 }
 
-                TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  checked  1);
+               // TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  checked  1);
 
              /*    Any work over there to steal?*/
                 speer = cpumask_test_cpu(peer_cpu, online) ?
