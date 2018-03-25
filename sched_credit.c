@@ -4,7 +4,6 @@
  *
  *        File: common/csched_credit.c
  *      Author: Emmanuel Ackaouy
- *
  * Description: Credit-based SMP CPU scheduler
  */
 
