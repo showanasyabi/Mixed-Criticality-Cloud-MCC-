@@ -1854,7 +1854,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
         peer_node = node;
         do
         {
-             Select the pCPUs in this node that have work we can steal.
+           //  Select the pCPUs in this node that have work we can steal.
             cpumask_andnot(&workers, online, prv->idlers);
             cpumask_and(&workers, &workers, &node_to_cpumask(peer_node));
             __cpumask_clear_cpu(cpu, &workers);
@@ -1895,7 +1895,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
 
                 if ( CSCHED_PCPU(peer_cpu)->nr_runnable <= 1 )
                 {
-                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skipp'n  0);
+                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skipp  0);
                     goto next_cpu;
                 }
 
