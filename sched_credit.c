@@ -4,6 +4,7 @@
  *
  *        File: common/csched_credit.c
  *      Author: Emmanuel Ackaouy
+ *
  * Description: Credit-based SMP CPU scheduler
  */
 
@@ -1730,7 +1731,7 @@ csched_tick(void *_cpu)
     set_timer(&spc->ticker, NOW() + MICROSECS(prv->tick_period_us) );
 }
 
-/*static struct csched_vcpu *
+static struct csched_vcpu *
 csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
 {
     const struct csched_pcpu * const peer_pcpu = CSCHED_PCPU(peer_cpu);
@@ -1740,10 +1741,10 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
 
     ASSERT(peer_pcpu != NULL);
 
-    *//*
+
      * Don't steal from an idle CPU's runq because it's about to
      * pick up work from it itself.
-     *//*
+
     if ( unlikely(is_idle_vcpu(curr_on_cpu(peer_cpu))) )
         goto out;
 
@@ -1751,18 +1752,18 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
     {
         speer = __runq_elem(iter);
 
-        *//*
+
          * If next available VCPU here is not of strictly higher
          * priority than ours, this PCPU is useless to us.
-         *//*
+
         if ( speer->pri <= pri )
             break;
 
-        *//* Is this VCPU runnable on our PCPU? *//*
+         Is this VCPU runnable on our PCPU?
         vc = speer->vcpu;
         BUG_ON( is_idle_vcpu(vc) );
 
-        *//*
+
          * If the vcpu is still in peer_cpu's scheduling tail, or if it
          * has no useful soft affinity, skip it.
          *
@@ -1775,7 +1776,7 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
          * can be implemented by taking note of on what runq there are
          * vCPUs with useful soft affinities in some sort of bitmap
          * or counter.
-         *//*
+
         if ( vc->is_running ||
              (balance_step == BALANCE_SOFT_AFFINITY
               && !has_soft_affinity(vc, vc->cpu_hard_affinity)) )
@@ -1784,7 +1785,7 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
         affinity_balance_cpumask(vc, balance_step, cpumask_scratch);
         if ( __csched_vcpu_is_migrateable(vc, cpu, cpumask_scratch) )
         {
-            *//* We got a candidate. Grab it! *//*
+             We got a candidate. Grab it!
             TRACE_3D(TRC_CSCHED_STOLEN_VCPU, peer_cpu,
                      vc->domain->domain_id, vc->vcpu_id);
             SCHED_VCPU_STAT_CRANK(speer, migrate_q);
@@ -1792,11 +1793,11 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
             WARN_ON(vc->is_urgent);
             runq_remove(speer);
             vc->processor = cpu;
-            *//*
+
              * speer will start executing directly on cpu, without having to
              * go through runq_insert(). So we must update the runnable count
              * for cpu here.
-             *//*
+
             inc_nr_runnable(cpu);
             return speer;
         }
@@ -1804,9 +1805,9 @@ csched_runq_steal(int peer_cpu, int cpu, int pri, int balance_step)
  out:
     SCHED_STAT_CRANK(steal_peer_idle);
     return NULL;
-}*/
+}
 
-/*static struct csched_vcpu *
+static struct csched_vcpu *
 csched_load_balance(struct csched_private *prv, int cpu,
     struct csched_vcpu *snext, bool_t *stolen)
 {
@@ -1948,7 +1949,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
      Failed to find more important work elsewhere...
     __runq_remove(snext);
     return snext;
-}*/
+}
 
 /*
  * This function is in the critical path. It is designed to be simple and
@@ -2095,10 +2096,10 @@ csched_schedule(
      * urgent work... If not, csched_load_balance() will return snext, but
      * already removed from the runq.
      */
-   // if ( snext->pri > CSCHED_PRI_TS_OVER ) //mcc
+   if ( snext->pri > CSCHED_PRI_TS_OVER ) //mcc
         __runq_remove(snext);
-   // else //mcc
-     //   snext = csched_load_balance(prv, cpu, snext, &ret.migrated); //mcc
+    else //mcc
+        snext = csched_load_balance(prv, cpu, snext, &ret.migrated); //mcc
 
     /*
      * Update idlers mask if necessary. When we're idling, other CPUs
