@@ -1895,7 +1895,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
 
                 if ( CSCHED_PCPU(peer_cpu)->nr_runnable <= 1 )
                 {
-                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skipp  0);
+                    TRACE_2D(TRC_CSCHED_STEAL_CHECK, peer_cpu,  skip  0);
                     goto next_cpu;
                 }
 
