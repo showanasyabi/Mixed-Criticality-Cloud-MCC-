@@ -254,7 +254,7 @@ struct csched_private {
 
 static void csched_tick(void *_cpu);
 static void csched_acct(void *dummy);
-static inline void __runq_tickle(struct csched_vcpu *new);
+static inline void __mcc_runq_tickle(struct csched_vcpu *new);
 
 
 
@@ -383,142 +383,156 @@ boolean_param("tickle_one_idle_cpu", opt_tickle_one_idle);
 
 DEFINE_PER_CPU(unsigned int, last_tickle_cpu);
 
-static inline void __runq_tickle(struct csched_vcpu *new)
+
+
+
+static inline void __mcc_runq_tickle(struct csched_vcpu *new)
 {
     unsigned int cpu = new->vcpu->processor;
-    struct csched_vcpu * const cur = CSCHED_VCPU(curr_on_cpu(cpu));
-    struct csched_private *prv = CSCHED_PRIV(per_cpu(scheduler, cpu));
-    cpumask_t mask, idle_mask, *online;
-    int balance_step, idlers_empty;
-
-    ASSERT(cur);
+    cpumask_t mask;
     cpumask_clear(&mask);
+    __cpumask_set_cpu(cpu, &mask);
+    cpumask_raise_softirq(&mask, SCHEDULE_SOFTIRQ);
 
-    online = cpupool_domain_cpumask(new->sdom->dom);
-    cpumask_and(&idle_mask, prv->idlers, online);
-    idlers_empty = cpumask_empty(&idle_mask);
 
-    /*
-     * If the pcpu is idle, or there are no idlers and the new
-     * vcpu is a higher priority than the old vcpu, run it here.
-     *
-     * If there are idle cpus, first try to find one suitable to run
-     * new, so we can avoid preempting cur.  If we cannot find a
-     * suitable idler on which to run new, run it here, but try to
-     * find a suitable idler on which to run cur instead.
-     */
-    if ( cur->pri == CSCHED_PRI_IDLE
-         || (idlers_empty && new->pri > cur->pri) )
-    {
-        if ( cur->pri != CSCHED_PRI_IDLE )
-            SCHED_STAT_CRANK(tickled_busy_cpu);
-        else
-            SCHED_STAT_CRANK(tickled_idle_cpu);
-        __cpumask_set_cpu(cpu, &mask);
-    }
-    else if ( !idlers_empty )
-    {
-        /*
-         * Soft and hard affinity balancing loop. For vcpus without
-         * a useful soft affinity, consider hard affinity only.
-         */
-        for_each_affinity_balance_step( balance_step )
-        {
-            int new_idlers_empty;
-
-            if ( balance_step == BALANCE_SOFT_AFFINITY
-                 && !has_soft_affinity(new->vcpu,
-                                       new->vcpu->cpu_hard_affinity) )
-                continue;
-
-            /* Are there idlers suitable for new (for this balance step)? */
-            affinity_balance_cpumask(new->vcpu, balance_step,
-                                     cpumask_scratch_cpu(cpu));
-            cpumask_and(cpumask_scratch_cpu(cpu),
-                        cpumask_scratch_cpu(cpu), &idle_mask);
-            new_idlers_empty = cpumask_empty(cpumask_scratch_cpu(cpu));
-
-            /*
-             * Let's not be too harsh! If there aren't idlers suitable
-             * for new in its soft affinity mask, make sure we check its
-             * hard affinity as well, before taking final decisions.
-             */
-            if ( new_idlers_empty
-                 && balance_step == BALANCE_SOFT_AFFINITY )
-                continue;
-
-            /*
-             * If there are no suitable idlers for new, and it's higher
-             * priority than cur, check whether we can migrate cur away.
-             * We have to do it indirectly, via _VPF_migrating (instead
-             * of just tickling any idler suitable for cur) because cur
-             * is running.
-             *
-             * If there are suitable idlers for new, no matter priorities,
-             * leave cur alone (as it is running and is, likely, cache-hot)
-             * and wake some of them (which is waking up and so is, likely,
-             * cache cold anyway).
-             */
-            if ( new_idlers_empty && new->pri > cur->pri )
-            {
-                if ( cpumask_intersects(cur->vcpu->cpu_hard_affinity,
-                                        &idle_mask) )
-                {
-                    SCHED_VCPU_STAT_CRANK(cur, kicked_away);
-                    SCHED_VCPU_STAT_CRANK(cur, migrate_r);
-                    SCHED_STAT_CRANK(migrate_kicked_away);
-                    set_bit(_VPF_migrating, &cur->vcpu->pause_flags);
-                }
-                /* Tickle cpu anyway, to let new preempt cur. */
-                SCHED_STAT_CRANK(tickled_busy_cpu);
-                __cpumask_set_cpu(cpu, &mask);
-            }
-            else if ( !new_idlers_empty )
-            {
-                /* Which of the idlers suitable for new shall we wake up? */
-                SCHED_STAT_CRANK(tickled_idle_cpu);
-                if ( opt_tickle_one_idle )
-                {
-                    this_cpu(last_tickle_cpu) =
-                        cpumask_cycle(this_cpu(last_tickle_cpu),
-                                      cpumask_scratch_cpu(cpu));
-                    __cpumask_set_cpu(this_cpu(last_tickle_cpu), &mask);
-                }
-                else
-                    cpumask_or(&mask, &mask, cpumask_scratch_cpu(cpu));
-            }
-
-            /* Did we find anyone? */
-            if ( !cpumask_empty(&mask) )
-                break;
-        }
-    }
-
-    if ( !cpumask_empty(&mask) )
-    {
-        if ( unlikely(tb_init_done) )
-        {
-            /* Avoid TRACE_*: saves checking !tb_init_done each step */
-            for_each_cpu(cpu, &mask)
-                __trace_var(TRC_CSCHED_TICKLE, 1, sizeof(cpu), &cpu);
-        }
-
-        /*
-         * Mark the designated CPUs as busy and send them all the scheduler
-         * interrupt. We need the for_each_cpu for dealing with the
-         * !opt_tickle_one_idle case. We must use cpumask_clear_cpu() and
-         * can't use cpumask_andnot(), because prv->idlers needs atomic access.
-         *
-         * In the default (and most common) case, when opt_rickle_one_idle is
-         * true, the loop does only one step, and only one bit is cleared.
-         */
-        for_each_cpu(cpu, &mask)
-            cpumask_clear_cpu(cpu, prv->idlers);
-        cpumask_raise_softirq(&mask, SCHEDULE_SOFTIRQ);
-    }
-    else
-        SCHED_STAT_CRANK(tickled_no_cpu);
 }
+
+//static inline void __runq_tickle(struct csched_vcpu *new)
+//{
+//    unsigned int cpu = new->vcpu->processor;
+//    struct csched_vcpu * const cur = CSCHED_VCPU(curr_on_cpu(cpu));
+//    struct csched_private *prv = CSCHED_PRIV(per_cpu(scheduler, cpu));
+//    cpumask_t mask, idle_mask, *online;
+//    int balance_step, idlers_empty;
+//
+//    ASSERT(cur);
+//    cpumask_clear(&mask);
+//
+//    online = cpupool_domain_cpumask(new->sdom->dom);
+//    cpumask_and(&idle_mask, prv->idlers, online);
+//    idlers_empty = cpumask_empty(&idle_mask);
+//
+//    /*
+//     * If the pcpu is idle, or there are no idlers and the new
+//     * vcpu is a higher priority than the old vcpu, run it here.
+//     *
+//     * If there are idle cpus, first try to find one suitable to run
+//     * new, so we can avoid preempting cur.  If we cannot find a
+//     * suitable idler on which to run new, run it here, but try to
+//     * find a suitable idler on which to run cur instead.
+//     */
+//    if ( cur->pri == CSCHED_PRI_IDLE
+//         || (idlers_empty && new->pri > cur->pri) )
+//    {
+//        if ( cur->pri != CSCHED_PRI_IDLE )
+//            SCHED_STAT_CRANK(tickled_busy_cpu);
+//        else
+//            SCHED_STAT_CRANK(tickled_idle_cpu);
+//        __cpumask_set_cpu(cpu, &mask);
+//    }
+//    else if ( !idlers_empty )
+//    {
+//        /*
+//         * Soft and hard affinity balancing loop. For vcpus without
+//         * a useful soft affinity, consider hard affinity only.
+//         */
+//        for_each_affinity_balance_step( balance_step )
+//        {
+//            int new_idlers_empty;
+//
+//            if ( balance_step == BALANCE_SOFT_AFFINITY
+//                 && !has_soft_affinity(new->vcpu,
+//                                       new->vcpu->cpu_hard_affinity) )
+//                continue;
+//
+//            /* Are there idlers suitable for new (for this balance step)? */
+//            affinity_balance_cpumask(new->vcpu, balance_step,
+//                                     cpumask_scratch_cpu(cpu));
+//            cpumask_and(cpumask_scratch_cpu(cpu),
+//                        cpumask_scratch_cpu(cpu), &idle_mask);
+//            new_idlers_empty = cpumask_empty(cpumask_scratch_cpu(cpu));
+//
+//            /*
+//             * Let's not be too harsh! If there aren't idlers suitable
+//             * for new in its soft affinity mask, make sure we check its
+//             * hard affinity as well, before taking final decisions.
+//             */
+//            if ( new_idlers_empty
+//                 && balance_step == BALANCE_SOFT_AFFINITY )
+//                continue;
+//
+//            /*
+//             * If there are no suitable idlers for new, and it's higher
+//             * priority than cur, check whether we can migrate cur away.
+//             * We have to do it indirectly, via _VPF_migrating (instead
+//             * of just tickling any idler suitable for cur) because cur
+//             * is running.
+//             *
+//             * If there are suitable idlers for new, no matter priorities,
+//             * leave cur alone (as it is running and is, likely, cache-hot)
+//             * and wake some of them (which is waking up and so is, likely,
+//             * cache cold anyway).
+//             */
+//            if ( new_idlers_empty && new->pri > cur->pri )
+//            {
+//                if ( cpumask_intersects(cur->vcpu->cpu_hard_affinity,
+//                                        &idle_mask) )
+//                {
+//                    SCHED_VCPU_STAT_CRANK(cur, kicked_away);
+//                    SCHED_VCPU_STAT_CRANK(cur, migrate_r);
+//                    SCHED_STAT_CRANK(migrate_kicked_away);
+//                    set_bit(_VPF_migrating, &cur->vcpu->pause_flags);
+//                }
+//                /* Tickle cpu anyway, to let new preempt cur. */
+//                SCHED_STAT_CRANK(tickled_busy_cpu);
+//                __cpumask_set_cpu(cpu, &mask);
+//            }
+//            else if ( !new_idlers_empty )
+//            {
+//                /* Which of the idlers suitable for new shall we wake up? */
+//                SCHED_STAT_CRANK(tickled_idle_cpu);
+//                if ( opt_tickle_one_idle )
+//                {
+//                    this_cpu(last_tickle_cpu) =
+//                        cpumask_cycle(this_cpu(last_tickle_cpu),
+//                                      cpumask_scratch_cpu(cpu));
+//                    __cpumask_set_cpu(this_cpu(last_tickle_cpu), &mask);
+//                }
+//                else
+//                    cpumask_or(&mask, &mask, cpumask_scratch_cpu(cpu));
+//            }
+//
+//            /* Did we find anyone? */
+//            if ( !cpumask_empty(&mask) )
+//                break;
+//        }
+//    }
+//
+//    if ( !cpumask_empty(&mask) )
+//    {
+//        if ( unlikely(tb_init_done) )
+//        {
+//            /* Avoid TRACE_*: saves checking !tb_init_done each step */
+//            for_each_cpu(cpu, &mask)
+//                __trace_var(TRC_CSCHED_TICKLE, 1, sizeof(cpu), &cpu);
+//        }
+//
+//        /*
+//         * Mark the designated CPUs as busy and send them all the scheduler
+//         * interrupt. We need the for_each_cpu for dealing with the
+//         * !opt_tickle_one_idle case. We must use cpumask_clear_cpu() and
+//         * can't use cpumask_andnot(), because prv->idlers needs atomic access.
+//         *
+//         * In the default (and most common) case, when opt_rickle_one_idle is
+//         * true, the loop does only one step, and only one bit is cleared.
+//         */
+//        for_each_cpu(cpu, &mask)
+//            cpumask_clear_cpu(cpu, prv->idlers);
+//        cpumask_raise_softirq(&mask, SCHEDULE_SOFTIRQ);
+//    }
+//    else
+//        SCHED_STAT_CRANK(tickled_no_cpu);
+//}
 
 
 
@@ -591,7 +605,7 @@ mcc_tick(void *_vc)
 
 
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    //__runq_tickle(svc);// fixme it was before set-timer in the first version
+    //__mcc_runq_tickle(svc);// fixme it was before set-timer in the first version
 }
 
 
@@ -701,6 +715,12 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     BUG_ON(!is_idle_vcpu(curr_on_cpu(cpu)));
     cpumask_set_cpu(cpu, prv->idlers);
     spc->nr_runnable = 0;
+
+    spc->mcc_cpu_mode = 1;
+    spc->mcc_u_1_1 = 0;
+    spc->mcc_u_2_1= 0;
+    spc->mcc_u_2_2=0;
+
 }
 
 static void
@@ -831,13 +851,19 @@ __csched_vcpu_is_migrateable(struct vcpu *vc, int dest_cpu, cpumask_t *mask)
            cpumask_test_cpu(dest_cpu, mask);
 }
 
+
+
 static int
-_csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
+_mcc_schedulability_test(struct vcpu *vc, int cpu)
+{
+    return 1; //fixme
+}
+
+static int
+_mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
 {
     cpumask_t cpus;
-    cpumask_t idlers;
     cpumask_t *online;
-    struct csched_pcpu *spc = NULL;
     int cpu = vc->processor;
     int balance_step;
 
@@ -847,24 +873,6 @@ _csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
 
     for_each_affinity_balance_step( balance_step )
     {
-        /*
-         * We want to pick up a pcpu among the ones that are online and
-         * can accommodate vc, which is basically what we computed above
-         * and stored in cpus. As far as hard affinity is concerned,
-         * there always will be at least one of these pcpus, hence cpus
-         * is never empty and the calls to cpumask_cycle() and
-         * cpumask_test_cpu() below are ok.
-         *
-         * On the other hand, when considering soft affinity too, it
-         * is possible for the mask to become empty (for instance, if the
-         * domain has been put in a cpupool that does not contain any of the
-         * pcpus in its soft affinity), which would result in the ASSERT()-s
-         * inside cpumask_*() operations triggering (in debug builds).
-         *
-         * Therefore, in this case, we filter the soft affinity mask against
-         * cpus and, if the result is empty, we just skip the soft affinity
-         * balancing step all together.
-         */
         if ( balance_step == BALANCE_SOFT_AFFINITY
              && !has_soft_affinity(vc, &cpus) )
             continue;
@@ -876,106 +884,42 @@ _csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
         /* If present, prefer vc's current processor */
         cpu = cpumask_test_cpu(vc->processor, &cpus)
                 ? vc->processor
-                : cpumask_cycle(vc->processor, &cpus);
+                : cpumask_cycle(vc->processor, &cpus);// fixme. should  we change this to seacrh from the begining of the mask? (energy)
         ASSERT(cpumask_test_cpu(cpu, &cpus));
 
-        /*
-         * Try to find an idle processor within the above constraints.
-         *
-         * In multi-core and multi-threaded CPUs, not all idle execution
-         * vehicles are equal!
-         *
-         * We give preference to the idle execution vehicle with the most
-         * idling neighbours in its grouping. This distributes work across
-         * distinct cores first and guarantees we don't do something stupid
-         * like run two VCPUs on co-hyperthreads while there are idle cores
-         * or sockets.
-         *
-         * Notice that, when computing the "idleness" of cpu, we may want to
-         * discount vc. That is, iff vc is the currently running and the only
-         * runnable vcpu on cpu, we add cpu to the idlers.
-         */
-        cpumask_and(&idlers, &cpu_online_map, CSCHED_PRIV(ops)->idlers);
-        if ( vc->processor == cpu && is_runq_idle(cpu) )
-            __cpumask_set_cpu(cpu, &idlers);
-        cpumask_and(&cpus, &cpus, &idlers);
+        if(_mcc_schedulability_test(vs, cpu))
 
-        /*
-         * It is important that cpu points to an idle processor, if a suitable
-         * one exists (and we can use cpus to check and, possibly, choose a new
-         * CPU, as we just &&-ed it with idlers). In fact, if we are on SMT, and
-         * cpu points to a busy thread with an idle sibling, both the threads
-         * will be considered the same, from the "idleness" calculation point
-         * of view", preventing vcpu from being moved to the thread that is
-         * actually idle.
-         *
-         * Notice that cpumask_test_cpu() is quicker than cpumask_empty(), so
-         * we check for it first.
-         */
-        if ( !cpumask_test_cpu(cpu, &cpus) && !cpumask_empty(&cpus) )
-            cpu = cpumask_cycle(cpu, &cpus);
-        __cpumask_clear_cpu(cpu, &cpus);
+            return cpu; // we hate migration so we love the current cpu
 
-        while ( !cpumask_empty(&cpus) )
+        else
         {
-            cpumask_t cpu_idlers;
-            cpumask_t nxt_idlers;
-            int nxt, weight_cpu, weight_nxt;
-            int migrate_factor;
+            __cpumask_clear_cpu(cpu, &cpus);
+            if(cpumask_empty(&cpus))
+                return cpu; // we dont have any other options, so we have to return this CPU even though we know that it cannot accommodate the vCPU
 
-            nxt = cpumask_cycle(cpu, &cpus);
+            while(!cpumask_empty(&cpus))
+            {
+                int nxt;
+                nxt = cpumask_cycle(cpu, &cpus); // fixme. should we change this to search form the begining of the mask?
 
-            if ( cpumask_test_cpu(cpu, per_cpu(cpu_core_mask, nxt)) )
-            {
-                /* We're on the same socket, so check the busy-ness of threads.
-                 * Migrate if # of idlers is less at all */
-                ASSERT( cpumask_test_cpu(nxt, per_cpu(cpu_core_mask, cpu)) );
-                migrate_factor = 1;
-                cpumask_and(&cpu_idlers, &idlers, per_cpu(cpu_sibling_mask,
-                            cpu));
-                cpumask_and(&nxt_idlers, &idlers, per_cpu(cpu_sibling_mask,
-                            nxt));
-            }
-            else
-            {
-                /* We're on different sockets, so check the busy-ness of cores.
-                 * Migrate only if the other core is twice as idle */
-                ASSERT( !cpumask_test_cpu(nxt, per_cpu(cpu_core_mask, cpu)) );
-                migrate_factor = 2;
-                cpumask_and(&cpu_idlers, &idlers, per_cpu(cpu_core_mask, cpu));
-                cpumask_and(&nxt_idlers, &idlers, per_cpu(cpu_core_mask, nxt));
-            }
+                if(_mcc_schedulability_test(vs, nxt))
+                    return nxt;
 
-            weight_cpu = cpumask_weight(&cpu_idlers);
-            weight_nxt = cpumask_weight(&nxt_idlers);
-            /* smt_power_savings: consolidate work rather than spreading it */
-            if ( sched_smt_power_savings ?
-                 weight_cpu > weight_nxt :
-                 weight_cpu * migrate_factor < weight_nxt )
-            {
-                cpumask_and(&nxt_idlers, &cpus, &nxt_idlers);
-                spc = CSCHED_PCPU(nxt);
-                cpu = cpumask_cycle(spc->idle_bias, &nxt_idlers);
-                cpumask_andnot(&cpus, &cpus, per_cpu(cpu_sibling_mask, cpu));
-            }
-            else
-            {
-                cpumask_andnot(&cpus, &cpus, &nxt_idlers);
+
+                __cpumask_clear_cpu(nxt, &cpus);
+
             }
         }
+        return cpu; // we are here because we could not find any approperiate vCPU, so we have to return the cpu
 
-        /* Stop if cpu is idle */
-        if ( cpumask_test_cpu(cpu, &idlers) )
-            break;
-    }
-
-    if ( commit && spc )
-       spc->idle_bias = cpu;
-
-    TRACE_3D(TRC_CSCHED_PICKED_CPU, vc->domain->domain_id, vc->vcpu_id, cpu);
-
-    return cpu;
 }
+
+
+
+
+
+
+
 
 static int
 csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc)
@@ -990,7 +934,7 @@ csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc)
      * get boosted, which we don't deserve as we are "only" migrating.
      */
     set_bit(CSCHED_FLAG_VCPU_MIGRATING, &svc->flags);
-    return _csched_cpu_pick(ops, vc, 1);
+    return _mcc_cpu_pick(ops, vc, 1);
 }
 
 static inline void
@@ -1092,7 +1036,7 @@ csched_vcpu_acct(struct csched_private *prv, unsigned int cpu)
          * migrating it to run elsewhere (see multi-core and multi-thread
          * support in csched_cpu_pick()).
          */
-        new_cpu = _csched_cpu_pick(ops, current, 0);
+        new_cpu = _mcc_cpu_pick(ops, current, 0);
 
         vcpu_schedule_unlock_irqrestore(lock, flags, current);
 
@@ -1290,7 +1234,7 @@ csched_vcpu_wake(const struct scheduler *ops, struct vcpu *vc)
 
     /* Put the VCPU on the runq and tickle CPUs */
     runq_insert(svc);
-    __runq_tickle(svc);
+    __mcc_runq_tickle(svc);
 }
 
 static void
