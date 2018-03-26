@@ -547,7 +547,7 @@ mcc_tick(void *_vc)
     // struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
 
-    if( is_idle_vcpu(vc))
+    if ( is_idle_domain(vc->domain))
         return;
 
     sdom = svc->sdom;
@@ -603,9 +603,10 @@ mcc_tick(void *_vc)
     //  spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
 
 
-
+    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
+        runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    //__mcc_runq_tickle(svc);// fixme it was before set-timer in the first version
+   __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
 }
 
 
@@ -860,8 +861,7 @@ _mcc_schedulability_test(struct vcpu *vc, int cpu)
 }
 
 static int
-_mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
-{
+_mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit) {
     cpumask_t cpus;
     cpumask_t *online;
     int cpu = vc->processor;
@@ -871,10 +871,10 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
     online = cpupool_domain_cpumask(vc->domain);
     cpumask_and(&cpus, vc->cpu_hard_affinity, online);
 
-    for_each_affinity_balance_step( balance_step )
+    for_each_affinity_balance_step(balance_step)
     {
-        if ( balance_step == BALANCE_SOFT_AFFINITY
-             && !has_soft_affinity(vc, &cpus) )
+        if (balance_step == BALANCE_SOFT_AFFINITY
+            && !has_soft_affinity(vc, &cpus))
             continue;
 
         /* Pick an online CPU from the proper affinity mask */
@@ -883,26 +883,26 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
 
         /* If present, prefer vc's current processor */
         cpu = cpumask_test_cpu(vc->processor, &cpus)
-                ? vc->processor
-                : cpumask_cycle(vc->processor, &cpus);// fixme. should  we change this to seacrh from the begining of the mask? (energy)
+              ? vc->processor
+              : cpumask_cycle(vc->processor,
+                              &cpus);// fixme. should  we change this to seacrh from the begining of the mask? (energy)
         ASSERT(cpumask_test_cpu(cpu, &cpus));
 
-        if(_mcc_schedulability_test(vs, cpu))
+        if (_mcc_schedulability_test(vc, cpu))
 
-            return cpu; // we hate migration so we love the current cpu
+            return cpu; // we hate migration. we love the current cpu
 
-        else
-        {
+        else {
             __cpumask_clear_cpu(cpu, &cpus);
-            if(cpumask_empty(&cpus))
+            if (cpumask_empty(&cpus))
                 return cpu; // we dont have any other options, so we have to return this CPU even though we know that it cannot accommodate the vCPU
 
-            while(!cpumask_empty(&cpus))
-            {
+            while (!cpumask_empty(&cpus)) {
                 int nxt;
-                nxt = cpumask_cycle(cpu, &cpus); // fixme. should we change this to search form the begining of the mask?
+                nxt = cpumask_cycle(cpu,
+                                    &cpus); // fixme. should we change this to search form the begining of the mask?
 
-                if(_mcc_schedulability_test(vs, nxt))
+                if (_mcc_schedulability_test(vc, nxt))
                     return nxt;
 
 
@@ -912,9 +912,10 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
         }
         return cpu; // we are here because we could not find any approperiate vCPU, so we have to return the cpu
 
+    }
+    return cpu;
+
 }
-
-
 
 
 
@@ -1081,9 +1082,10 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->mcc_deadline = svc->mcc_period;
     svc->mcc_v_deadline = svc->mcc_period;
 
-    init_timer(&svc->mcc_ticker, mcc_tick, (void *)(struct vcpu*)vc, vc->processor);
-    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-
+   if ( !is_idle_domain(vc->domain)) {
+       init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
+       set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
+   }
 
     SCHED_VCPU_STATS_RESET(svc);
     SCHED_STAT_CRANK(vcpu_alloc);
@@ -1685,6 +1687,7 @@ csched_tick(void *_cpu)
 //{
 //    const struct csched_pcpu * const peer_pcpu = CSCHED_PCPU(peer_cpu);
 //    struct csched_vcpu *speer;
+
 //    struct list_head *iter;
 //    struct vcpu *vc;
 //
