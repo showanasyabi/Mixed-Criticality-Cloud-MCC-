@@ -1448,49 +1448,49 @@ csched_dom_destroy(const struct scheduler *ops, struct domain *dom)
  * through the runq and move up any UNDERs that are preceded by OVERS. We
  * remember the last UNDER to make the move up operation O(1).
  */
-static void
-csched_runq_sort(struct csched_private *prv, unsigned int cpu)
-{
-    struct csched_pcpu * const spc = CSCHED_PCPU(cpu);
-    struct list_head *runq, *elem, *next, *last_under;
-    struct csched_vcpu *svc_elem;
-    spinlock_t *lock;
-    unsigned long flags;
-    int sort_epoch;
-
-    sort_epoch = prv->runq_sort;
-    if ( sort_epoch == spc->runq_sort_last )
-        return;
-
-    spc->runq_sort_last = sort_epoch;
-
-    lock = pcpu_schedule_lock_irqsave(cpu, &flags);
-
-    runq = &spc->runq;
-    elem = runq->next;
-    last_under = runq;
-
-    while ( elem != runq )
-    {
-        next = elem->next;
-        svc_elem = __runq_elem(elem);
-
-        if ( svc_elem->pri >= CSCHED_PRI_TS_UNDER )
-        {
-            /* does elem need to move up the runq? */
-            if ( elem->prev != last_under )
-            {
-                list_del(elem);
-                list_add(elem, last_under);
-            }
-            last_under = elem;
-        }
-
-        elem = next;
-    }
-
-    pcpu_schedule_unlock_irqrestore(lock, flags, cpu);
-}
+//static void
+//csched_runq_sort(struct csched_private *prv, unsigned int cpu)
+//{
+//    struct csched_pcpu * const spc = CSCHED_PCPU(cpu);
+//    struct list_head *runq, *elem, *next, *last_under;
+//    struct csched_vcpu *svc_elem;
+//    spinlock_t *lock;
+//    unsigned long flags;
+//    int sort_epoch;
+//
+//    sort_epoch = prv->runq_sort;
+//    if ( sort_epoch == spc->runq_sort_last )
+//        return;
+//
+//    spc->runq_sort_last = sort_epoch;
+//
+//    lock = pcpu_schedule_lock_irqsave(cpu, &flags);
+//
+//    runq = &spc->runq;
+//    elem = runq->next;
+//    last_under = runq;
+//
+//    while ( elem != runq )
+//    {
+//        next = elem->next;
+//        svc_elem = __runq_elem(elem);
+//
+//        if ( svc_elem->pri >= CSCHED_PRI_TS_UNDER )
+//        {
+//            /* does elem need to move up the runq? */
+//            if ( elem->prev != last_under )
+//            {
+//                list_del(elem);
+//                list_add(elem, last_under);
+//            }
+//            last_under = elem;
+//        }
+//
+//        elem = next;
+//    }
+//
+//    pcpu_schedule_unlock_irqrestore(lock, flags, cpu);
+//}
 
 static void
 csched_acct(void* dummy)
@@ -1721,7 +1721,7 @@ csched_tick(void *_cpu)
      * modified priorities. This is a special O(n) sort and runs at most
      * once per accounting period (currently 30 milliseconds).
      */
-    csched_runq_sort(prv, cpu);
+  //  csched_runq_sort(prv, cpu);
 
     set_timer(&spc->ticker, NOW() + MICROSECS(prv->tick_period_us) );
 }
