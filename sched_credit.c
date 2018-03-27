@@ -255,7 +255,7 @@ struct csched_private {
 
 
 static void csched_tick(void *_cpu);
-static void csched_acct(void *dummy);
+//static void csched_acct(void *dummy);
 static inline void __mcc_runq_tickle(struct csched_vcpu *new);
 
 
@@ -726,9 +726,8 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     if ( prv->ncpus == 1 )
     {
         prv->master = cpu;
-        init_timer(&prv->master_ticker, csched_acct, prv, cpu);
-        set_timer(&prv->master_ticker,
-                  NOW() + MILLISECS(prv->tslice_ms));
+      //  init_timer(&prv->master_ticker, csched_acct, prv, cpu);
+       // set_timer(&prv->master_ticker, NOW() + MILLISECS(prv->tslice_ms));
     }
 
     cpumask_and(cpumask_scratch, prv->cpus, &node_to_cpumask(cpu_to_node(cpu)));
@@ -1492,212 +1491,212 @@ csched_dom_destroy(const struct scheduler *ops, struct domain *dom)
 //    pcpu_schedule_unlock_irqrestore(lock, flags, cpu);
 //}
 
-static void
-csched_acct(void* dummy)
-{
-    struct csched_private *prv = dummy;
-    unsigned long flags;
-    struct list_head *iter_vcpu, *next_vcpu;
-    struct list_head *iter_sdom, *next_sdom;
-    struct csched_vcpu *svc;
-    struct csched_dom *sdom;
-    uint32_t credit_total;
-    uint32_t weight_total;
-    uint32_t weight_left;
-    uint32_t credit_fair;
-    uint32_t credit_peak;
-    uint32_t credit_cap;
-    int credit_balance;
-    int credit_xtra;
-    int credit;
-
-
-    spin_lock_irqsave(&prv->lock, flags);
-
-    weight_total = prv->weight;
-    credit_total = prv->credit;
-
-    /* Converge balance towards 0 when it drops negative */
-    if ( prv->credit_balance < 0 )
-    {
-        credit_total -= prv->credit_balance;
-        SCHED_STAT_CRANK(acct_balance);
-    }
-
-    if ( unlikely(weight_total == 0) )
-    {
-        prv->credit_balance = 0;
-        spin_unlock_irqrestore(&prv->lock, flags);
-        SCHED_STAT_CRANK(acct_no_work);
-        goto out;
-    }
-
-    SCHED_STAT_CRANK(acct_run);
-
-    weight_left = weight_total;
-    credit_balance = 0;
-    credit_xtra = 0;
-    credit_cap = 0U;
-
-    list_for_each_safe( iter_sdom, next_sdom, &prv->active_sdom )
-    {
-        sdom = list_entry(iter_sdom, struct csched_dom, active_sdom_elem);
-
-        BUG_ON( is_idle_domain(sdom->dom) );
-        BUG_ON( sdom->active_vcpu_count == 0 );
-        BUG_ON( sdom->weight == 0 );
-        BUG_ON( (sdom->weight * sdom->active_vcpu_count) > weight_left );
-
-        weight_left -= ( sdom->weight * sdom->active_vcpu_count );
-
-        /*
-         * A domain's fair share is computed using its weight in competition
-         * with that of all other active domains.
-         *
-         * At most, a domain can use credits to run all its active VCPUs
-         * for one full accounting period. We allow a domain to earn more
-         * only when the system-wide credit balance is negative.
-         */
-        credit_peak = sdom->active_vcpu_count * prv->credits_per_tslice;
-        if ( prv->credit_balance < 0 )
-        {
-            credit_peak += ( ( -prv->credit_balance
-                               * sdom->weight
-                               * sdom->active_vcpu_count) +
-                             (weight_total - 1)
-                           ) / weight_total;
-        }
-
-        if ( sdom->cap != 0U )
-        {
-            credit_cap = ((sdom->cap * prv->credits_per_tslice) + 99) / 100;
-            if ( credit_cap < credit_peak )
-                credit_peak = credit_cap;
-
-            /* FIXME -- set cap per-vcpu as well...? */
-            credit_cap = ( credit_cap + ( sdom->active_vcpu_count - 1 )
-                         ) / sdom->active_vcpu_count;
-        }
-
-        credit_fair = ( ( credit_total
-                          * sdom->weight
-                          * sdom->active_vcpu_count )
-                        + (weight_total - 1)
-                      ) / weight_total;
-
-        if ( credit_fair < credit_peak )
-        {
-            credit_xtra = 1;
-        }
-        else
-        {
-            if ( weight_left != 0U )
-            {
-                /* Give other domains a chance at unused credits */
-                credit_total += ( ( ( credit_fair - credit_peak
-                                    ) * weight_total
-                                  ) + ( weight_left - 1 )
-                                ) / weight_left;
-            }
-
-            if ( credit_xtra )
-            {
-                /*
-                 * Lazily keep domains with extra credits at the head of
-                 * the queue to give others a chance at them in future
-                 * accounting periods.
-                 */
-                SCHED_STAT_CRANK(acct_reorder);
-                list_del(&sdom->active_sdom_elem);
-                list_add(&sdom->active_sdom_elem, &prv->active_sdom);
-            }
-
-            credit_fair = credit_peak;
-        }
-
-        /* Compute fair share per VCPU */
-        credit_fair = ( credit_fair + ( sdom->active_vcpu_count - 1 )
-                      ) / sdom->active_vcpu_count;
-
-
-        list_for_each_safe( iter_vcpu, next_vcpu, &sdom->active_vcpu )
-        {
-            svc = list_entry(iter_vcpu, struct csched_vcpu, active_vcpu_elem);
-            BUG_ON( sdom != svc->sdom );
-
-            /* Increment credit */
-            atomic_add(credit_fair, &svc->credit);
-            credit = atomic_read(&svc->credit);
-
-            /*
-             * Recompute priority or, if VCPU is idling, remove it from
-             * the active list.
-             */
-            if ( credit < 0 )
-            {
-                svc->pri = CSCHED_PRI_TS_OVER;
-
-                /* Park running VCPUs of capped-out domains */
-                if ( sdom->cap != 0U &&
-                     credit < -credit_cap &&
-                     !test_and_set_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
-                {
-                    SCHED_STAT_CRANK(vcpu_park);
-                    vcpu_pause_nosync(svc->vcpu);
-                }
-
-                /* Lower bound on credits */
-                if ( credit < -prv->credits_per_tslice )
-                {
-                    SCHED_STAT_CRANK(acct_min_credit);
-                    credit = -prv->credits_per_tslice;
-                    atomic_set(&svc->credit, credit);
-                }
-            }
-            else
-            {
-                svc->pri = CSCHED_PRI_TS_UNDER;
-
-                /* Unpark any capped domains whose credits go positive */
-                if ( test_and_clear_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
-                {
-                    /*
-                     * It's important to unset the flag AFTER the unpause()
-                     * call to make sure the VCPU's priority is not boosted
-                     * if it is woken up here.
-                     */
-                    SCHED_STAT_CRANK(vcpu_unpark);
-                    vcpu_unpause(svc->vcpu);
-                }
-
-                /* Upper bound on credits means VCPU stops earning */
-                if ( credit > prv->credits_per_tslice )
-                {
-                    __csched_vcpu_acct_stop_locked(prv, svc);
-                    /* Divide credits in half, so that when it starts
-                     * accounting again, it starts a little bit "ahead" */
-                    credit /= 2;
-                    atomic_set(&svc->credit, credit);
-                }
-            }
-
-            SCHED_VCPU_STAT_SET(svc, credit_last, credit);
-            SCHED_VCPU_STAT_SET(svc, credit_incr, credit_fair);
-            credit_balance += credit;
-        }
-    }
-
-    prv->credit_balance = credit_balance;
-
-    spin_unlock_irqrestore(&prv->lock, flags);
-
-    /* Inform each CPU that its runq needs to be sorted */
-    prv->runq_sort++;
-
-out:
-    set_timer( &prv->master_ticker,
-               NOW() + MILLISECS(prv->tslice_ms));
-}
+//static void
+//csched_acct(void* dummy)
+//{
+//    struct csched_private *prv = dummy;
+//    unsigned long flags;
+//    struct list_head *iter_vcpu, *next_vcpu;
+//    struct list_head *iter_sdom, *next_sdom;
+//    struct csched_vcpu *svc;
+//    struct csched_dom *sdom;
+//    uint32_t credit_total;
+//    uint32_t weight_total;
+//    uint32_t weight_left;
+//    uint32_t credit_fair;
+//    uint32_t credit_peak;
+//    uint32_t credit_cap;
+//    int credit_balance;
+//    int credit_xtra;
+//    int credit;
+//
+//
+//    spin_lock_irqsave(&prv->lock, flags);
+//
+//    weight_total = prv->weight;
+//    credit_total = prv->credit;
+//
+//    /* Converge balance towards 0 when it drops negative */
+//    if ( prv->credit_balance < 0 )
+//    {
+//        credit_total -= prv->credit_balance;
+//        SCHED_STAT_CRANK(acct_balance);
+//    }
+//
+//    if ( unlikely(weight_total == 0) )
+//    {
+//        prv->credit_balance = 0;
+//        spin_unlock_irqrestore(&prv->lock, flags);
+//        SCHED_STAT_CRANK(acct_no_work);
+//        goto out;
+//    }
+//
+//    SCHED_STAT_CRANK(acct_run);
+//
+//    weight_left = weight_total;
+//    credit_balance = 0;
+//    credit_xtra = 0;
+//    credit_cap = 0U;
+//
+//    list_for_each_safe( iter_sdom, next_sdom, &prv->active_sdom )
+//    {
+//        sdom = list_entry(iter_sdom, struct csched_dom, active_sdom_elem);
+//
+//        BUG_ON( is_idle_domain(sdom->dom) );
+//        BUG_ON( sdom->active_vcpu_count == 0 );
+//        BUG_ON( sdom->weight == 0 );
+//        BUG_ON( (sdom->weight * sdom->active_vcpu_count) > weight_left );
+//
+//        weight_left -= ( sdom->weight * sdom->active_vcpu_count );
+//
+//        /*
+//         * A domain's fair share is computed using its weight in competition
+//         * with that of all other active domains.
+//         *
+//         * At most, a domain can use credits to run all its active VCPUs
+//         * for one full accounting period. We allow a domain to earn more
+//         * only when the system-wide credit balance is negative.
+//         */
+//        credit_peak = sdom->active_vcpu_count * prv->credits_per_tslice;
+//        if ( prv->credit_balance < 0 )
+//        {
+//            credit_peak += ( ( -prv->credit_balance
+//                               * sdom->weight
+//                               * sdom->active_vcpu_count) +
+//                             (weight_total - 1)
+//                           ) / weight_total;
+//        }
+//
+//        if ( sdom->cap != 0U )
+//        {
+//            credit_cap = ((sdom->cap * prv->credits_per_tslice) + 99) / 100;
+//            if ( credit_cap < credit_peak )
+//                credit_peak = credit_cap;
+//
+//            /* FIXME -- set cap per-vcpu as well...? */
+//            credit_cap = ( credit_cap + ( sdom->active_vcpu_count - 1 )
+//                         ) / sdom->active_vcpu_count;
+//        }
+//
+//        credit_fair = ( ( credit_total
+//                          * sdom->weight
+//                          * sdom->active_vcpu_count )
+//                        + (weight_total - 1)
+//                      ) / weight_total;
+//
+//        if ( credit_fair < credit_peak )
+//        {
+//            credit_xtra = 1;
+//        }
+//        else
+//        {
+//            if ( weight_left != 0U )
+//            {
+//                /* Give other domains a chance at unused credits */
+//                credit_total += ( ( ( credit_fair - credit_peak
+//                                    ) * weight_total
+//                                  ) + ( weight_left - 1 )
+//                                ) / weight_left;
+//            }
+//
+//            if ( credit_xtra )
+//            {
+//                /*
+//                 * Lazily keep domains with extra credits at the head of
+//                 * the queue to give others a chance at them in future
+//                 * accounting periods.
+//                 */
+//                SCHED_STAT_CRANK(acct_reorder);
+//                list_del(&sdom->active_sdom_elem);
+//                list_add(&sdom->active_sdom_elem, &prv->active_sdom);
+//            }
+//
+//            credit_fair = credit_peak;
+//        }
+//
+//        /* Compute fair share per VCPU */
+//        credit_fair = ( credit_fair + ( sdom->active_vcpu_count - 1 )
+//                      ) / sdom->active_vcpu_count;
+//
+//
+//        list_for_each_safe( iter_vcpu, next_vcpu, &sdom->active_vcpu )
+//        {
+//            svc = list_entry(iter_vcpu, struct csched_vcpu, active_vcpu_elem);
+//            BUG_ON( sdom != svc->sdom );
+//
+//            /* Increment credit */
+//            atomic_add(credit_fair, &svc->credit);
+//            credit = atomic_read(&svc->credit);
+//
+//            /*
+//             * Recompute priority or, if VCPU is idling, remove it from
+//             * the active list.
+//             */
+//            if ( credit < 0 )
+//            {
+//                svc->pri = CSCHED_PRI_TS_OVER;
+//
+//                /* Park running VCPUs of capped-out domains */
+//                if ( sdom->cap != 0U &&
+//                     credit < -credit_cap &&
+//                     !test_and_set_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
+//                {
+//                    SCHED_STAT_CRANK(vcpu_park);
+//                    vcpu_pause_nosync(svc->vcpu);
+//                }
+//
+//                /* Lower bound on credits */
+//                if ( credit < -prv->credits_per_tslice )
+//                {
+//                    SCHED_STAT_CRANK(acct_min_credit);
+//                    credit = -prv->credits_per_tslice;
+//                    atomic_set(&svc->credit, credit);
+//                }
+//            }
+//            else
+//            {
+//                svc->pri = CSCHED_PRI_TS_UNDER;
+//
+//                /* Unpark any capped domains whose credits go positive */
+//                if ( test_and_clear_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
+//                {
+//                    /*
+//                     * It's important to unset the flag AFTER the unpause()
+//                     * call to make sure the VCPU's priority is not boosted
+//                     * if it is woken up here.
+//                     */
+//                    SCHED_STAT_CRANK(vcpu_unpark);
+//                    vcpu_unpause(svc->vcpu);
+//                }
+//
+//                /* Upper bound on credits means VCPU stops earning */
+//                if ( credit > prv->credits_per_tslice )
+//                {
+//                    __csched_vcpu_acct_stop_locked(prv, svc);
+//                    /* Divide credits in half, so that when it starts
+//                     * accounting again, it starts a little bit "ahead" */
+//                    credit /= 2;
+//                    atomic_set(&svc->credit, credit);
+//                }
+//            }
+//
+//            SCHED_VCPU_STAT_SET(svc, credit_last, credit);
+//            SCHED_VCPU_STAT_SET(svc, credit_incr, credit_fair);
+//            credit_balance += credit;
+//        }
+//    }
+//
+//    prv->credit_balance = credit_balance;
+//
+//    spin_unlock_irqrestore(&prv->lock, flags);
+//
+//    /* Inform each CPU that its runq needs to be sorted */
+//    prv->runq_sort++;
+//
+//out:
+//    set_timer( &prv->master_ticker,
+//               NOW() + MILLISECS(prv->tslice_ms));
+//}
 
 static void
 csched_tick(void *_cpu)
