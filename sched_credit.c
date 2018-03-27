@@ -23,6 +23,7 @@
 #include <xen/keyhandler.h>
 #include <xen/trace.h>
 #include <xen/err.h>
+#include "../include/xen/sched.h"
 
 
 /*
@@ -189,6 +190,7 @@ struct csched_vcpu {
     unsigned mcc_crit_level;
     struct timer mcc_ticker;
     s_time_t mcc_elapsed_time;
+    unsigned int mcc_is_resident;
 
 
 
@@ -303,6 +305,34 @@ dec_nr_runnable(unsigned int cpu)
     ASSERT(CSCHED_PCPU(cpu)->nr_runnable >= 1);
     CSCHED_PCPU(cpu)->nr_runnable--;
 }
+
+
+static inline void
+mcc_dec_util(unsigned int cpu, struct csched_vcpu *svc )
+{
+    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
+    if(svc->mcc_crit_level == 2) {
+        CSCHED_PCPU(cpu)->mcc_u_2_1 -= svc->mcc_wcet_1;// / svc->mcc_period; fixme!
+        CSCHED_PCPU(cpu)->mcc_u_2_2 -= svc->mcc_wcet_2;// / svc->mcc_period;
+    }
+    else
+        CSCHED_PCPU(cpu)->mcc_u_1_1 -= svc->mcc_wcet_1;/// svc->mcc_period;
+}
+
+static inline void
+mcc_inc_util(unsigned int cpu, struct csched_vcpu *svc )
+{
+    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
+    if(svc->mcc_crit_level == 2) {
+        CSCHED_PCPU(cpu)->mcc_u_2_1 += svc->mcc_wcet_1;// / svc->mcc_period;fixme !
+        CSCHED_PCPU(cpu)->mcc_u_2_2 += svc->mcc_wcet_2;// / svc->mcc_period;
+    }
+    else
+        CSCHED_PCPU(cpu)->mcc_u_1_1 += svc->mcc_wcet_1;/// svc->mcc_period;
+}
+
+
+
 
 static inline void
 __runq_insert(struct csched_vcpu *svc)
@@ -604,7 +634,7 @@ mcc_tick(void *_vc)
 
 
     if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
-        runq_insert(svc);
+        __runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
 }
@@ -1043,6 +1073,12 @@ csched_vcpu_acct(struct csched_private *prv, unsigned int cpu)
 
         if ( new_cpu != cpu )
         {
+
+
+            mcc_dec_util(cpu, svc);
+            svc->mcc_is_resident = 0;
+
+
             SCHED_VCPU_STAT_CRANK(svc, migrate_r);
             SCHED_STAT_CRANK(migrate_running);
             set_bit(_VPF_migrating, &current->pause_flags);
@@ -1081,6 +1117,8 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->mcc_wcet_2 =  MICROSECS(30000);
     svc->mcc_deadline = svc->mcc_period;
     svc->mcc_v_deadline = svc->mcc_period;
+    svc->mcc_is_resident = 0;
+
 
    if ( !is_idle_domain(vc->domain)) {
        init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
@@ -1108,6 +1146,12 @@ csched_vcpu_insert(const struct scheduler *ops, struct vcpu *vc)
     spin_unlock_irq(lock);
 
     lock = vcpu_schedule_lock_irq(vc);
+
+    if(svc->mcc_is_resident == 0) //fixme is it the best way for having conditional variables
+    {
+        svc->mcc_is_resident=1;
+        mcc_inc_util(vc->processor, svc);
+    }
 
     if ( !__vcpu_on_runq(svc) && vcpu_runnable(vc) && !vc->is_running )
         runq_insert(svc);
