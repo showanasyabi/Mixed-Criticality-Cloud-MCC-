@@ -392,8 +392,8 @@ runq_remove(struct csched_vcpu *svc)
 static void burn_credits(struct csched_vcpu *svc, s_time_t now)
 {
     s_time_t delta;
-    uint64_t val;
-    unsigned int credits;
+  //  uint64_t val;
+    //unsigned int credits;
 
     /* Assert svc is current */
     ASSERT( svc == CSCHED_VCPU(curr_on_cpu(svc->vcpu->processor)) );
@@ -1144,6 +1144,7 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->mcc_deadline = svc->mcc_period;
     svc->mcc_v_deadline = svc->mcc_period;
     svc->mcc_is_resident = 0;
+    svc->mcc_cpu_consumption= 0;
 
 
    if ( !is_idle_domain(vc->domain)) {
@@ -1983,13 +1984,13 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
 {
     struct list_head * const runq = RUNQ(cpu);
     struct csched_vcpu *snext;
-    snext= __runq_elem(runq->next);
     struct list_head *iter;
+    snext= __runq_elem(runq->next);
     if (mode == 1)
     {
     list_for_each( iter, runq )
     {
-        const struct csched_vcpu * const iter_svc = __runq_elem(iter);
+         struct csched_vcpu *  iter_svc = __runq_elem(iter);
         if (  iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
             snext = iter_svc;
     }
@@ -1999,7 +2000,7 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
 
         list_for_each( iter, runq )
         {
-            const struct csched_vcpu * const iter_svc = __runq_elem(iter);
+             struct csched_vcpu *  iter_svc = __runq_elem(iter);
             if (  iter_svc->mcc_deadline < snext->mcc_deadline )
                 snext = iter_svc;
         }
