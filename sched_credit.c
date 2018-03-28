@@ -191,6 +191,7 @@ struct csched_vcpu {
     struct timer mcc_ticker;
     s_time_t mcc_elapsed_time;
     unsigned int mcc_is_resident;
+    s_time_t mcc_cpu_consumption;
 
 
 
@@ -400,12 +401,36 @@ static void burn_credits(struct csched_vcpu *svc, s_time_t now)
     if ( (delta = now - svc->start_time) <= 0 )
         return;
 
-    val = delta * CSCHED_CREDITS_PER_MSEC + svc->residual;
-    svc->residual = do_div(val, MILLISECS(1));
-    credits = val;
-    ASSERT(credits == val); /* make sure we haven't truncated val */
-    atomic_sub(credits, &svc->credit);
-    svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
+
+        svc->mcc_cpu_consumption += delta;
+        if (svc->mcc_crit_level == 1)
+        {
+            if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_1) )
+            {
+                svc->pri= CSCHED_PRI_TS_OVER;
+            }
+            else
+                svc->pri= CSCHED_PRI_TS_UNDER;
+        }
+        else // criticality 2
+        {
+            if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_2) )
+            {
+                svc->pri= CSCHED_PRI_TS_OVER;
+            }
+            else
+
+                svc->pri= CSCHED_PRI_TS_UNDER;
+        }
+
+
+    //val = delta * CSCHED_CREDITS_PER_MSEC + svc->residual;
+   // svc->residual = do_div(val, MILLISECS(1));
+   // credits = val;
+    //ASSERT(credits == val); /* make sure we haven't truncated val */
+    //atomic_sub(credits, &svc->credit);
+    //svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
+    svc->start_time += delta;
 }
 
 static bool_t __read_mostly opt_tickle_one_idle = 1;
@@ -600,6 +625,8 @@ mcc_tick(void *_vc)
     }
 
     svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+    svc->mcc_cpu_consumption = 0;
+
 
     // svc->MCS_elapsed_time = 0; // fixme
 
@@ -1045,7 +1072,7 @@ csched_vcpu_acct(struct csched_private *prv, unsigned int cpu)
     /*
      * Update credits
      */
-    burn_credits(svc, NOW());
+   // burn_credits(svc, NOW());
 
     /*
      * Put this VCPU and domain back on the active list if it was
@@ -1950,6 +1977,38 @@ csched_tick(void *_cpu)
  * This function is in the critical path. It is designed to be simple and
  * fast for the common case.
  */
+
+static struct  csched_vcpu *
+mcc_earliest_deadline_vcpu(int cpu, int mode)
+{
+    struct list_head * const runq = RUNQ(cpu);
+    struct csched_vcpu *snext;
+    snext= __runq_elem(runq->next);
+    struct list_head *iter;
+    if (mode == 1)
+    {
+    list_for_each( iter, runq )
+    {
+        const struct csched_vcpu * const iter_svc = __runq_elem(iter);
+        if (  iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+            snext = iter_svc;
+    }
+    }
+    else //mode is high criticality mode
+    {
+
+        list_for_each( iter, runq )
+        {
+            const struct csched_vcpu * const iter_svc = __runq_elem(iter);
+            if (  iter_svc->mcc_deadline < snext->mcc_deadline )
+                snext = iter_svc;
+        }
+    }
+
+   return snext;
+}
+
+
 static struct task_slice
 csched_schedule(
     const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
@@ -1961,6 +2020,7 @@ csched_schedule(
     struct csched_vcpu *snext;
     struct task_slice ret;
     s_time_t runtime, tslice;
+    int mcc_cpu_mode; // High criticality mode is 2 and low criticality mode is 1
 
     SCHED_STAT_CRANK(schedule);
     CSCHED_VCPU_CHECK(current);
@@ -2067,7 +2127,14 @@ csched_schedule(
         dec_nr_runnable(cpu);
     }
 
-    snext = __runq_elem(runq->next);
+
+
+    //mcc determine CPU mpde // fixme
+     mcc_cpu_mode =1;
+
+   // snext = __runq_elem(runq->next);
+    snext = mcc_earliest_deadline_vcpu(cpu , mcc_cpu_mode);
+
     ret.migrated = 0;
 
     /* Tasklet work (which runs in idle VCPU context) overrides all else. */
