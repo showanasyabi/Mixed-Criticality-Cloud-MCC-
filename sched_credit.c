@@ -1141,8 +1141,8 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->mcc_period = MICROSECS(100000); // fixme
     svc->mcc_wcet_1 =  MICROSECS(25000);
     svc->mcc_wcet_2 =  MICROSECS(30000);
-    svc->mcc_deadline = svc->mcc_period;
-    svc->mcc_v_deadline = svc->mcc_period;
+    svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
+    svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
     svc->mcc_is_resident = 0;
     svc->mcc_cpu_consumption= 0;
 
@@ -1986,12 +1986,14 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
     struct csched_vcpu *snext;
     struct list_head *iter;
     snext= __runq_elem(runq->next);
+    if(snext->pri = CSCHED_PRI_IDLE)
+        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
     if (mode == 1)
     {
     list_for_each( iter, runq )
     {
          struct csched_vcpu *  iter_svc = __runq_elem(iter);
-        if (  iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
             snext = iter_svc;
     }
     }
@@ -2001,7 +2003,7 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
         list_for_each( iter, runq )
         {
              struct csched_vcpu *  iter_svc = __runq_elem(iter);
-            if (  iter_svc->mcc_deadline < snext->mcc_deadline )
+            if ( iter_svc->pri >= snext->pri &&  iter_svc->mcc_deadline < snext->mcc_deadline )
                 snext = iter_svc;
         }
     }
