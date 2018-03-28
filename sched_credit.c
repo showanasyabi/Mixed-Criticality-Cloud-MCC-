@@ -1986,7 +1986,7 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
     struct csched_vcpu *snext;
     struct list_head *iter;
     snext= __runq_elem(runq->next);
-    if(snext->pri = CSCHED_PRI_IDLE)
+    if(snext->pri == CSCHED_PRI_IDLE)
         return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
     if (mode == 1)
     {
