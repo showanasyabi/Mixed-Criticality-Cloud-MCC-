@@ -75,7 +75,7 @@
 #define CSCHED_FLAG_VCPU_YIELD     0x1  /* VCPU yielding */
 #define CSCHED_FLAG_VCPU_MIGRATING 0x2  /* VCPU may have moved to a new pcpu */
 
-
+#define MCC_UTIL_NORMALIZATION    1000000
 /*
  * Useful macros
  */
@@ -307,17 +307,26 @@ dec_nr_runnable(unsigned int cpu)
     CSCHED_PCPU(cpu)->nr_runnable--;
 }
 
+unsigned int mcc_utli(struct csched_vcpu *svc, int mode) // it returns the utilization of a vCPU, which is between 0 and MCC_UTIL_NORMALIZATION(1000000)
+{
+if (mode ==1)
+    return (svc->mcc_wcet_1 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+    else
+    return (svc->mcc_wcet_2 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+
+}
+
 
 static inline void
 mcc_dec_util(unsigned int cpu, struct csched_vcpu *svc )
 {
     ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
     if(svc->mcc_crit_level == 2) {
-        CSCHED_PCPU(cpu)->mcc_u_2_1 -= svc->mcc_wcet_1;// / svc->mcc_period; fixme!
-        CSCHED_PCPU(cpu)->mcc_u_2_2 -= svc->mcc_wcet_2;// / svc->mcc_period;
+        CSCHED_PCPU(cpu)->mcc_u_2_1 -= mcc_utli(svc, 1);
+        CSCHED_PCPU(cpu)->mcc_u_2_2 -=  mcc_utli(svc, 2);
     }
     else
-        CSCHED_PCPU(cpu)->mcc_u_1_1 -= svc->mcc_wcet_1;/// svc->mcc_period;
+        CSCHED_PCPU(cpu)->mcc_u_1_1 -= mcc_utli(svc, 1);
 }
 
 static inline void
@@ -325,11 +334,11 @@ mcc_inc_util(unsigned int cpu, struct csched_vcpu *svc )
 {
     ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
     if(svc->mcc_crit_level == 2) {
-        CSCHED_PCPU(cpu)->mcc_u_2_1 += svc->mcc_wcet_1;// / svc->mcc_period;fixme !
-        CSCHED_PCPU(cpu)->mcc_u_2_2 += svc->mcc_wcet_2;// / svc->mcc_period;
+        CSCHED_PCPU(cpu)->mcc_u_2_1 += mcc_utli(svc, 1);
+        CSCHED_PCPU(cpu)->mcc_u_2_2 += smcc_utli(svc, 2);
     }
     else
-        CSCHED_PCPU(cpu)->mcc_u_1_1 += svc->mcc_wcet_1;/// svc->mcc_period;
+        CSCHED_PCPU(cpu)->mcc_u_1_1 += mcc_utli(svc, 1);
 }
 
 
@@ -590,7 +599,6 @@ static inline void __mcc_runq_tickle(struct csched_vcpu *new)
 //}
 
 
-
 //mcc
 static void
 mcc_tick(void *_vc)
@@ -598,8 +606,8 @@ mcc_tick(void *_vc)
     struct vcpu *vc  = (struct vcpu *)_vc;
     struct csched_vcpu *  svc = CSCHED_VCPU(vc);
     struct csched_dom * sdom;
-    // unsigned int cpu = vc->processor;
-    // struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+     unsigned int cpu = vc->processor;
+     struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
 
     if ( is_idle_domain(vc->domain))
@@ -614,7 +622,11 @@ mcc_tick(void *_vc)
     if (svc->mcc_crit_level == 2 )
     {
         svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
-        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);// fixme
+
+        svc->mcc_v_deadline= NOW() + MICROSECS(((spc->mcc_u_2_1  *  svc->mcc_period) / (MCC_UTIL_NORMALIZATION - spc->mcc_u_1_1)));// fixme
+
+
+
 
     }
     else
