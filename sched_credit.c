@@ -1369,22 +1369,27 @@ csched_dom_cntl(
     switch ( op->cmd )
     {
     case XEN_DOMCTL_SCHEDOP_getinfo:
-        op->u.credit.weight = sdom->weight;
-        op->u.credit.cap = sdom->cap;
+
+            op->u.credit.weight = sdom->mcc_wcet_1;
+            op->u.credit.cap = sdom->mcc_wcet_2;
+            op->u.credit.mcc_period = sdom->mcc_period;
+            op->u.credit.mcc_cri_level= sdom-> mcc_crit_level;
+
         break;
     case XEN_DOMCTL_SCHEDOP_putinfo:
-        if ( op->u.credit.weight != 0 )
+        if ( op->u.credit.weight != (uint32_t)~0U )
         {
-            if ( !list_empty(&sdom->active_sdom_elem) )
-            {
-                prv->weight -= sdom->weight * sdom->active_vcpu_count;
-                prv->weight += op->u.credit.weight * sdom->active_vcpu_count;
-            }
-            sdom->weight = op->u.credit.weight;
+            sdom->mcc_wcet_1 = op->u.credit.weight;
         }
 
-        if ( op->u.credit.cap != (uint16_t)~0U )
-            sdom->cap = op->u.credit.cap;
+        if ( op->u.credit.cap != (uint32_t)~0U )
+            sdom->mcc_wcet_2 = op->u.credit.cap;
+            if ( op->u.credit.mcc_cri_level != (uint16_t)~0U  )
+            sdom->mcc_crit_level = op->u.credit.mcc_cri_level;
+
+            if ( op->u.credit.mcc_period != (uint32_t)~0U  )
+            sdom->mcc_period = op->u.credit.mcc_period;
+
         break;
     default:
         rc = -EINVAL;
