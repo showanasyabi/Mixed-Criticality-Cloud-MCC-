@@ -335,7 +335,7 @@ mcc_inc_util(unsigned int cpu, struct csched_vcpu *svc )
     ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
     if(svc->mcc_crit_level == 2) {
         CSCHED_PCPU(cpu)->mcc_u_2_1 += mcc_utli(svc, 1);
-        CSCHED_PCPU(cpu)->mcc_u_2_2 += smcc_utli(svc, 2);
+        CSCHED_PCPU(cpu)->mcc_u_2_2 += mcc_utli(svc, 2);
     }
     else
         CSCHED_PCPU(cpu)->mcc_u_1_1 += mcc_utli(svc, 1);
