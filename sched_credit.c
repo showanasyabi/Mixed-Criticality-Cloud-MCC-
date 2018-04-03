@@ -1170,9 +1170,10 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
         CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
     //mcc
 
-    svc->mcc_period = svc->sdom->mcc_period; // fixme
-    svc->mcc_wcet_1 =  svc->sdom->mcc_wcet_1;
-    svc->mcc_wcet_2 =   svc->sdom->mcc_wcet_2;
+    svc->mcc_period = 50000; // fixme
+    svc->mcc_wcet_1 =  10000;
+    svc->mcc_wcet_2 =   20000;
+    svc->mcc_crit_level =1;
     svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
     svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
     svc->mcc_is_resident = 0;
