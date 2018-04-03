@@ -614,10 +614,11 @@ mcc_tick(void *_vc)
         return;
 
     sdom = svc->sdom;
-    svc->mcc_wcet_1 =  sdom->mcc_wcet_1;
-    svc->mcc_wcet_2 = sdom->mcc_wcet_2;
+    svc->mcc_wcet_1 =  MICROSECS(sdom->mcc_wcet_1);
+    svc->mcc_wcet_2 = MICROSECS(sdom->mcc_wcet_2);
+    svc->mcc_period= MICROSECS(sdom->mcc_period);
     svc->mcc_crit_level = sdom->mcc_crit_level;
-    svc->mcc_period= sdom->mcc_period;
+
 
     if (svc->mcc_crit_level == 2 )
     {
