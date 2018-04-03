@@ -614,8 +614,8 @@ mcc_tick(void *_vc)
         return;
 
     sdom = svc->sdom;
-    svc->mcc_wcet_1 = MICROSECS( sdom->mcc_wcet_1);
-    svc->mcc_wcet_2 = MICROSECS(sdom->mcc_wcet_2);
+    svc->mcc_wcet_1 = sdom->mcc_wcet_1;
+    svc->mcc_wcet_2 = sdom->mcc_wcet_2;
     svc->mcc_crit_level = sdom->mcc_crit_level;
     svc->mcc_period= sdom->mcc_period;
 
@@ -1170,9 +1170,9 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
         CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
     //mcc
 
-    svc->mcc_period = MICROSECS(100000); // fixme
-    svc->mcc_wcet_1 =  MICROSECS(25000);
-    svc->mcc_wcet_2 =  MICROSECS(30000);
+    svc->mcc_period = svc->sdom->mcc_period; // fixme
+    svc->mcc_wcet_1 =  svc->sdom->mcc_wcet_1;
+    svc->mcc_wcet_2 =   svc->sdom->mcc_wcet_2;
     svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
     svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
     svc->mcc_is_resident = 0;
@@ -1468,9 +1468,9 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
     sdom->dom = dom;
     sdom->weight = CSCHED_DEFAULT_WEIGHT;
     sdom->mcc_crit_level = 1; // shoud we define this as a constant // fixme
-    sdom->mcc_period = MICROSECS(100000);
-    sdom->mcc_wcet_1 = MICROSECS(30000);
-    sdom->mcc_wcet_2= MICROSECS(400000);
+    sdom->mcc_period = 50000;
+    sdom->mcc_wcet_1 = 10000;
+    sdom->mcc_wcet_2= 20000;
 
 
     return (void *)sdom;
