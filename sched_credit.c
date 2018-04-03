@@ -1468,9 +1468,9 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
     sdom->dom = dom;
     sdom->weight = CSCHED_DEFAULT_WEIGHT;
     sdom->mcc_crit_level = 1; // shoud we define this as a constant // fixme
-    sdom->mcc_period = MICROSECS(100000);
-    sdom->mcc_wcet_1 = MICROSECS(30000);
-    sdom->mcc_wcet_2= MICROSECS(400000);
+    sdom->mcc_period = 50000;
+    sdom->mcc_wcet_1 = 10000;
+    sdom->mcc_wcet_2= 20000;
 
 
     return (void *)sdom;
