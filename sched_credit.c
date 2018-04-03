@@ -926,6 +926,8 @@ __csched_vcpu_is_migrateable(struct vcpu *vc, int dest_cpu, cpumask_t *mask)
 static int
 _mcc_schedulability_test(struct vcpu *vc, int cpu)
 {
+    return 1;
+    /*
     struct csched_vcpu *  svc = CSCHED_VCPU(vc);
     struct  csched_pcpu * spc = CSCHED_PCPU(cpu);
     unsigned int u_1_1 = spc->mcc_u_1_1;
@@ -946,6 +948,7 @@ _mcc_schedulability_test(struct vcpu *vc, int cpu)
         return 1;
     else
         return 0;
+        */
 
 }
 
