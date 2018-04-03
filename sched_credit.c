@@ -309,10 +309,10 @@ dec_nr_runnable(unsigned int cpu)
 
 unsigned int mcc_utli(struct csched_vcpu *svc, int mode) // it returns the utilization of a vCPU, which is between 0 and MCC_UTIL_NORMALIZATION(1000000)
 {
-if (mode ==1)
-    return (svc->mcc_wcet_1 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+    if (mode ==1)
+        return (svc->mcc_wcet_1 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
     else
-    return (svc->mcc_wcet_2 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+        return (svc->mcc_wcet_2 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
 
 }
 
@@ -401,7 +401,7 @@ runq_remove(struct csched_vcpu *svc)
 static void burn_credits(struct csched_vcpu *svc, s_time_t now)
 {
     s_time_t delta;
-  //  uint64_t val;
+    //  uint64_t val;
     //unsigned int credits;
 
     /* Assert svc is current */
@@ -411,31 +411,31 @@ static void burn_credits(struct csched_vcpu *svc, s_time_t now)
         return;
 
 
-        svc->mcc_cpu_consumption += delta;
-        if (svc->mcc_crit_level == 1)
+    svc->mcc_cpu_consumption += delta;
+    if (svc->mcc_crit_level == 1)
+    {
+        if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_1) )
         {
-            if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_1) )
-            {
-                svc->pri= CSCHED_PRI_TS_OVER;
-            }
-            else
-                svc->pri= CSCHED_PRI_TS_UNDER;
+            svc->pri= CSCHED_PRI_TS_OVER;
         }
-        else // criticality 2
+        else
+            svc->pri= CSCHED_PRI_TS_UNDER;
+    }
+    else // criticality 2
+    {
+        if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_2) )
         {
-            if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_2) )
-            {
-                svc->pri= CSCHED_PRI_TS_OVER;
-            }
-            else
+            svc->pri= CSCHED_PRI_TS_OVER;
+        }
+        else
 
-                svc->pri= CSCHED_PRI_TS_UNDER;
-        }
+            svc->pri= CSCHED_PRI_TS_UNDER;
+    }
 
 
     //val = delta * CSCHED_CREDITS_PER_MSEC + svc->residual;
-   // svc->residual = do_div(val, MILLISECS(1));
-   // credits = val;
+    // svc->residual = do_div(val, MILLISECS(1));
+    // credits = val;
     //ASSERT(credits == val); /* make sure we haven't truncated val */
     //atomic_sub(credits, &svc->credit);
     //svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
@@ -606,16 +606,16 @@ mcc_tick(void *_vc)
     struct vcpu *vc  = (struct vcpu *)_vc;
     struct csched_vcpu *  svc = CSCHED_VCPU(vc);
     struct csched_dom * sdom;
-     unsigned int cpu = vc->processor;
-     struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+    unsigned int cpu = vc->processor;
+    struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
 
     if ( is_idle_domain(vc->domain))
         return;
 
     sdom = svc->sdom;
-    svc->mcc_wcet_1 = sdom->mcc_wcet_1;
-    svc->mcc_wcet_2 = sdom->mcc_wcet_2;
+    svc->mcc_wcet_1 = MICROSECS( sdom->mcc_wcet_1);
+    svc->mcc_wcet_2 = MICROSECS(sdom->mcc_wcet_2);
     svc->mcc_crit_level = sdom->mcc_crit_level;
     svc->mcc_period= sdom->mcc_period;
 
@@ -675,7 +675,7 @@ mcc_tick(void *_vc)
     if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
         __runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-   __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
+    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
 }
 
 
@@ -765,8 +765,8 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     if ( prv->ncpus == 1 )
     {
         prv->master = cpu;
-      //  init_timer(&prv->master_ticker, csched_acct, prv, cpu);
-       // set_timer(&prv->master_ticker, NOW() + MILLISECS(prv->tslice_ms));
+        //  init_timer(&prv->master_ticker, csched_acct, prv, cpu);
+        // set_timer(&prv->master_ticker, NOW() + MILLISECS(prv->tslice_ms));
     }
 
     cpumask_and(cpumask_scratch, prv->cpus, &node_to_cpumask(cpu_to_node(cpu)));
@@ -930,16 +930,16 @@ _mcc_schedulability_test(struct vcpu *vc, int cpu)
     unsigned int u_1_1 = spc->mcc_u_1_1;
     unsigned  int u_2_1 = spc->mcc_u_2_1;
     unsigned int  u_2_2 = spc->mcc_u_2_2;
-   if (svc->mcc_crit_level == 2)
-   {
-       u_2_1 += mcc_utli(svc, 1);
-       u_2_2 += mcc_utli(svc, 2);
-   }
+    if (svc->mcc_crit_level == 2)
+    {
+        u_2_1 += mcc_utli(svc, 1);
+        u_2_2 += mcc_utli(svc, 2);
+    }
     else
-   {
-       u_1_1 += mcc_utli(svc, 1);
+    {
+        u_1_1 += mcc_utli(svc, 1);
 
-   }
+    }
 
     if (((u_2_1 * u_1_1)/(MCC_UTIL_NORMALIZATION - u_1_1)) + u_2_2 <= MCC_UTIL_NORMALIZATION)
         return 1;
@@ -1057,7 +1057,7 @@ __csched_vcpu_acct_start(struct csched_private *prv, struct csched_vcpu *svc)
 
 static inline void
 __csched_vcpu_acct_stop_locked(struct csched_private *prv,
-    struct csched_vcpu *svc)
+                               struct csched_vcpu *svc)
 {
     struct csched_dom * const sdom = svc->sdom;
 
@@ -1104,7 +1104,7 @@ csched_vcpu_acct(struct csched_private *prv, unsigned int cpu)
     /*
      * Update credits
      */
-   // burn_credits(svc, NOW());
+    // burn_credits(svc, NOW());
 
     /*
      * Put this VCPU and domain back on the active list if it was
@@ -1167,23 +1167,22 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->sdom = dd;
     svc->vcpu = vc;
     svc->pri = is_idle_domain(vc->domain) ?
-        CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
+               CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
     //mcc
 
-    svc->mcc_period = 50000; // fixme
-    svc->mcc_wcet_1 =  10000;
-    svc->mcc_wcet_2 =   20000;
-    svc->mcc_crit_level =1;
+    svc->mcc_period = MICROSECS(100000); // fixme
+    svc->mcc_wcet_1 =  MICROSECS(25000);
+    svc->mcc_wcet_2 =  MICROSECS(30000);
     svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
     svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
     svc->mcc_is_resident = 0;
     svc->mcc_cpu_consumption= 0;
 
 
-   if ( !is_idle_domain(vc->domain)) {
-       init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
-       set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
-   }
+    if ( !is_idle_domain(vc->domain)) {
+        init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
+        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
+    }
 
     SCHED_VCPU_STATS_RESET(svc);
     SCHED_STAT_CRANK(vcpu_alloc);
@@ -1319,7 +1318,7 @@ csched_vcpu_wake(const struct scheduler *ops, struct vcpu *vc)
      * latencies.
      *
      * This allows wake-to-run latency sensitive VCPUs to preempt
-     * more CPU resource intensive VCPUs without impacting overall 
+     * more CPU resource intensive VCPUs without impacting overall
      * system fairness.
      *
      * There are two cases, when we don't want to boost:
@@ -1354,9 +1353,9 @@ csched_vcpu_yield(const struct scheduler *ops, struct vcpu *vc)
 
 static int
 csched_dom_cntl(
-    const struct scheduler *ops,
-    struct domain *d,
-    struct xen_domctl_scheduler_op *op)
+        const struct scheduler *ops,
+        struct domain *d,
+        struct xen_domctl_scheduler_op *op)
 {
     struct csched_dom * const sdom = CSCHED_DOM(d);
     struct csched_private *prv = CSCHED_PRIV(ops);
@@ -1369,21 +1368,21 @@ csched_dom_cntl(
 
     switch ( op->cmd )
     {
-    case XEN_DOMCTL_SCHEDOP_getinfo:
+        case XEN_DOMCTL_SCHEDOP_getinfo:
 
             op->u.credit.weight = sdom->mcc_wcet_1;
             op->u.credit.cap = sdom->mcc_wcet_2;
             op->u.credit.mcc_period = sdom->mcc_period;
             op->u.credit.mcc_cri_level= sdom-> mcc_crit_level;
 
-        break;
-    case XEN_DOMCTL_SCHEDOP_putinfo:
-        if ( op->u.credit.weight != (uint32_t)~0U )
-        {
-            sdom->mcc_wcet_1 = op->u.credit.weight;
-        }
+            break;
+        case XEN_DOMCTL_SCHEDOP_putinfo:
+            if ( op->u.credit.weight != (uint32_t)~0U )
+            {
+                sdom->mcc_wcet_1 = op->u.credit.weight;
+            }
 
-        if ( op->u.credit.cap != (uint32_t)~0U )
+            if ( op->u.credit.cap != (uint32_t)~0U )
             sdom->mcc_wcet_2 = op->u.credit.cap;
             if ( op->u.credit.mcc_cri_level != (uint16_t)~0U  )
             sdom->mcc_crit_level = op->u.credit.mcc_cri_level;
@@ -1391,10 +1390,10 @@ csched_dom_cntl(
             if ( op->u.credit.mcc_period != (uint32_t)~0U  )
             sdom->mcc_period = op->u.credit.mcc_period;
 
-        break;
-    default:
-        rc = -EINVAL;
-        break;
+            break;
+        default:
+            rc = -EINVAL;
+            break;
     }
 
     spin_unlock_irqrestore(&prv->lock, flags);
@@ -1416,7 +1415,7 @@ __csched_set_tslice(struct csched_private *prv, unsigned timeslice)
 
 static int
 csched_sys_cntl(const struct scheduler *ops,
-                        struct xen_sysctl_scheduler_op *sc)
+                struct xen_sysctl_scheduler_op *sc)
 {
     int rc = -EINVAL;
     struct xen_sysctl_credit_schedule *params = &sc->u.sched_credit;
@@ -1425,30 +1424,30 @@ csched_sys_cntl(const struct scheduler *ops,
 
     switch ( sc->cmd )
     {
-    case XEN_SYSCTL_SCHEDOP_putinfo:
-        if ( params->tslice_ms > XEN_SYSCTL_CSCHED_TSLICE_MAX
-             || params->tslice_ms < XEN_SYSCTL_CSCHED_TSLICE_MIN
-             || (params->ratelimit_us
-                 && (params->ratelimit_us > XEN_SYSCTL_SCHED_RATELIMIT_MAX
-                     || params->ratelimit_us < XEN_SYSCTL_SCHED_RATELIMIT_MIN))
-             || MICROSECS(params->ratelimit_us) > MILLISECS(params->tslice_ms) )
+        case XEN_SYSCTL_SCHEDOP_putinfo:
+            if ( params->tslice_ms > XEN_SYSCTL_CSCHED_TSLICE_MAX
+                 || params->tslice_ms < XEN_SYSCTL_CSCHED_TSLICE_MIN
+                 || (params->ratelimit_us
+                     && (params->ratelimit_us > XEN_SYSCTL_SCHED_RATELIMIT_MAX
+                         || params->ratelimit_us < XEN_SYSCTL_SCHED_RATELIMIT_MIN))
+                 || MICROSECS(params->ratelimit_us) > MILLISECS(params->tslice_ms) )
                 goto out;
 
-        spin_lock_irqsave(&prv->lock, flags);
-        __csched_set_tslice(prv, params->tslice_ms);
-        if ( !prv->ratelimit_us && params->ratelimit_us )
-            printk(XENLOG_INFO "Enabling context switch rate limiting\n");
-        else if ( prv->ratelimit_us && !params->ratelimit_us )
-            printk(XENLOG_INFO "Disabling context switch rate limiting\n");
-        prv->ratelimit_us = params->ratelimit_us;
-        spin_unlock_irqrestore(&prv->lock, flags);
+            spin_lock_irqsave(&prv->lock, flags);
+            __csched_set_tslice(prv, params->tslice_ms);
+            if ( !prv->ratelimit_us && params->ratelimit_us )
+                printk(XENLOG_INFO "Enabling context switch rate limiting\n");
+            else if ( prv->ratelimit_us && !params->ratelimit_us )
+        printk(XENLOG_INFO "Disabling context switch rate limiting\n");
+            prv->ratelimit_us = params->ratelimit_us;
+            spin_unlock_irqrestore(&prv->lock, flags);
 
-        /* FALLTHRU */
-    case XEN_SYSCTL_SCHEDOP_getinfo:
-        params->tslice_ms = prv->tslice_ms;
-        params->ratelimit_us = prv->ratelimit_us;
-        rc = 0;
-        break;
+            /* FALLTHRU */
+        case XEN_SYSCTL_SCHEDOP_getinfo:
+            params->tslice_ms = prv->tslice_ms;
+            params->ratelimit_us = prv->ratelimit_us;
+            rc = 0;
+            break;
     }
     out:
     return rc;
@@ -1469,9 +1468,9 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
     sdom->dom = dom;
     sdom->weight = CSCHED_DEFAULT_WEIGHT;
     sdom->mcc_crit_level = 1; // shoud we define this as a constant // fixme
-    sdom->mcc_period = 50000;
-    sdom->mcc_wcet_1 = 10000;
-    sdom->mcc_wcet_2= 20000;
+    sdom->mcc_period = MICROSECS(100000);
+    sdom->mcc_wcet_1 = MICROSECS(30000);
+    sdom->mcc_wcet_2= MICROSECS(400000);
 
 
     return (void *)sdom;
@@ -1786,7 +1785,7 @@ csched_tick(void *_cpu)
      * modified priorities. This is a special O(n) sort and runs at most
      * once per accounting period (currently 30 milliseconds).
      */
-  //  csched_runq_sort(prv, cpu);
+    //  csched_runq_sort(prv, cpu);
 
     set_timer(&spc->ticker, NOW() + MICROSECS(prv->tick_period_us) );
 }
@@ -2028,31 +2027,31 @@ mcc_earliest_deadline_vcpu(int cpu, int mode)
         return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
     if (mode == 1)
     {
-    list_for_each( iter, runq )
-    {
-         struct csched_vcpu *  iter_svc = __runq_elem(iter);
-        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
-            snext = iter_svc;
-    }
+        list_for_each( iter, runq )
+        {
+            struct csched_vcpu *  iter_svc = __runq_elem(iter);
+            if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+                snext = iter_svc;
+        }
     }
     else //mode is high criticality mode
     {
 
         list_for_each( iter, runq )
         {
-             struct csched_vcpu *  iter_svc = __runq_elem(iter);
+            struct csched_vcpu *  iter_svc = __runq_elem(iter);
             if ( iter_svc->pri >= snext->pri &&  iter_svc->mcc_deadline < snext->mcc_deadline )
                 snext = iter_svc;
         }
     }
 
-   return snext;
+    return snext;
 }
 
 
 static struct task_slice
 csched_schedule(
-    const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
+        const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
 {
     const int cpu = smp_processor_id();
     struct list_head * const runq = RUNQ(cpu);
@@ -2171,9 +2170,9 @@ csched_schedule(
 
 
     //mcc determine CPU mpde // fixme
-     mcc_cpu_mode =1;
+    mcc_cpu_mode =1;
 
-   // snext = __runq_elem(runq->next);
+    // snext = __runq_elem(runq->next);
     snext = mcc_earliest_deadline_vcpu(cpu , mcc_cpu_mode);
 
     ret.migrated = 0;
@@ -2199,10 +2198,10 @@ csched_schedule(
      * urgent work... If not, csched_load_balance() will return snext, but
      * already removed from the runq.
      */
-   //if ( snext->pri > CSCHED_PRI_TS_OVER ) //mcc
-        __runq_remove(snext);
-   // else //mcc
-      //  snext = csched_load_balance(prv, cpu, snext, &ret.migrated); //mcc
+    //if ( snext->pri > CSCHED_PRI_TS_OVER ) //mcc
+    __runq_remove(snext);
+    // else //mcc
+    //  snext = csched_load_balance(prv, cpu, snext, &ret.migrated); //mcc
 
     /*
      * Update idlers mask if necessary. When we're idling, other CPUs
@@ -2221,7 +2220,7 @@ csched_schedule(
     if ( !is_idle_vcpu(snext->vcpu) )
         snext->start_time += now;
 
-out:
+    out:
     /*
      * Return task to run next...
      */
@@ -2239,16 +2238,16 @@ csched_dump_vcpu(struct csched_vcpu *svc)
     struct csched_dom * const sdom = svc->sdom;
 
     printk("[%i.%i] pri=%i flags=%x cpu=%i",
-            svc->vcpu->domain->domain_id,
-            svc->vcpu->vcpu_id,
-            svc->pri,
-            svc->flags,
-            svc->vcpu->processor);
+           svc->vcpu->domain->domain_id,
+           svc->vcpu->vcpu_id,
+           svc->pri,
+           svc->flags,
+           svc->vcpu->processor);
 
     if ( sdom )
     {
         printk(" credit=%i [w=%u,cap=%u]", atomic_read(&svc->credit),
-                sdom->weight, sdom->cap);
+               sdom->weight, sdom->cap);
 #ifdef CSCHED_STATS
         printk(" (%d+%u) {a/i=%u/%u m=%u+%u (k=%u)}",
                 svc->stats.credit_last,
@@ -2332,18 +2331,18 @@ csched_dump(const struct scheduler *ops)
 #define idlers_buf keyhandler_scratch
 
     printk("info:\n"
-           "\tncpus              = %u\n"
-           "\tmaster             = %u\n"
-           "\tcredit             = %u\n"
-           "\tcredit balance     = %d\n"
-           "\tweight             = %u\n"
-           "\trunq_sort          = %u\n"
-           "\tdefault-weight     = %d\n"
-           "\ttslice             = %dms\n"
-           "\tratelimit          = %dus\n"
-           "\tcredits per msec   = %d\n"
-           "\tticks per tslice   = %d\n"
-           "\tmigration delay    = %uus\n",
+                   "\tncpus              = %u\n"
+                   "\tmaster             = %u\n"
+                   "\tcredit             = %u\n"
+                   "\tcredit balance     = %d\n"
+                   "\tweight             = %u\n"
+                   "\trunq_sort          = %u\n"
+                   "\tdefault-weight     = %d\n"
+                   "\ttslice             = %dms\n"
+                   "\tratelimit          = %dus\n"
+                   "\tcredits per msec   = %d\n"
+                   "\tticks per tslice   = %d\n"
+                   "\tmigration delay    = %uus\n",
            prv->ncpus,
            prv->master,
            prv->credit,
@@ -2420,7 +2419,7 @@ csched_init(struct scheduler *ops)
          || sched_credit_tslice_ms < XEN_SYSCTL_CSCHED_TSLICE_MIN )
     {
         printk("WARNING: sched_credit_tslice_ms outside of valid range [%d,%d].\n"
-               " Resetting to default %u\n",
+                       " Resetting to default %u\n",
                XEN_SYSCTL_CSCHED_TSLICE_MIN,
                XEN_SYSCTL_CSCHED_TSLICE_MAX,
                CSCHED_DEFAULT_TSLICE_MS);
@@ -2431,9 +2430,9 @@ csched_init(struct scheduler *ops)
 
     if ( MICROSECS(sched_ratelimit_us) > MILLISECS(sched_credit_tslice_ms) )
     {
-        printk("WARNING: sched_ratelimit_us >" 
-               "sched_credit_tslice_ms is undefined\n"
-               "Setting ratelimit_us to 1000 * tslice_ms\n");
+        printk("WARNING: sched_ratelimit_us >"
+                       "sched_credit_tslice_ms is undefined\n"
+                       "Setting ratelimit_us to 1000 * tslice_ms\n");
         prv->ratelimit_us = 1000 * prv->tslice_ms;
     }
     else
@@ -2477,47 +2476,47 @@ static void csched_tick_resume(const struct scheduler *ops, unsigned int cpu)
     prv = CSCHED_PRIV(ops);
 
     set_timer(&spc->ticker, now + MICROSECS(prv->tick_period_us)
-            - now % MICROSECS(prv->tick_period_us) );
+                            - now % MICROSECS(prv->tick_period_us) );
 }
 
 static const struct scheduler sched_credit_def = {
-    .name           = "SMP Credit Scheduler",
-    .opt_name       = "credit",
-    .sched_id       = XEN_SCHEDULER_CREDIT,
-    .sched_data     = NULL,
+        .name           = "SMP Credit Scheduler",
+        .opt_name       = "credit",
+        .sched_id       = XEN_SCHEDULER_CREDIT,
+        .sched_data     = NULL,
 
-    .init_domain    = csched_dom_init,
-    .destroy_domain = csched_dom_destroy,
+        .init_domain    = csched_dom_init,
+        .destroy_domain = csched_dom_destroy,
 
-    .insert_vcpu    = csched_vcpu_insert,
-    .remove_vcpu    = csched_vcpu_remove,
+        .insert_vcpu    = csched_vcpu_insert,
+        .remove_vcpu    = csched_vcpu_remove,
 
-    .sleep          = csched_vcpu_sleep,
-    .wake           = csched_vcpu_wake,
-    .yield          = csched_vcpu_yield,
+        .sleep          = csched_vcpu_sleep,
+        .wake           = csched_vcpu_wake,
+        .yield          = csched_vcpu_yield,
 
-    .adjust         = csched_dom_cntl,
-    .adjust_global  = csched_sys_cntl,
+        .adjust         = csched_dom_cntl,
+        .adjust_global  = csched_sys_cntl,
 
-    .pick_cpu       = csched_cpu_pick,
-    .do_schedule    = csched_schedule,
+        .pick_cpu       = csched_cpu_pick,
+        .do_schedule    = csched_schedule,
 
-    .dump_cpu_state = csched_dump_pcpu,
-    .dump_settings  = csched_dump,
-    .init           = csched_init,
-    .deinit         = csched_deinit,
-    .alloc_vdata    = csched_alloc_vdata,
-    .free_vdata     = csched_free_vdata,
-    .alloc_pdata    = csched_alloc_pdata,
-    .init_pdata     = csched_init_pdata,
-    .deinit_pdata   = csched_deinit_pdata,
-    .free_pdata     = csched_free_pdata,
-    .switch_sched   = csched_switch_sched,
-    .alloc_domdata  = csched_alloc_domdata,
-    .free_domdata   = csched_free_domdata,
+        .dump_cpu_state = csched_dump_pcpu,
+        .dump_settings  = csched_dump,
+        .init           = csched_init,
+        .deinit         = csched_deinit,
+        .alloc_vdata    = csched_alloc_vdata,
+        .free_vdata     = csched_free_vdata,
+        .alloc_pdata    = csched_alloc_pdata,
+        .init_pdata     = csched_init_pdata,
+        .deinit_pdata   = csched_deinit_pdata,
+        .free_pdata     = csched_free_pdata,
+        .switch_sched   = csched_switch_sched,
+        .alloc_domdata  = csched_alloc_domdata,
+        .free_domdata   = csched_free_domdata,
 
-    .tick_suspend   = csched_tick_suspend,
-    .tick_resume    = csched_tick_resume,
+        .tick_suspend   = csched_tick_suspend,
+        .tick_resume    = csched_tick_resume,
 };
 
 REGISTER_SCHEDULER(sched_credit_def);
