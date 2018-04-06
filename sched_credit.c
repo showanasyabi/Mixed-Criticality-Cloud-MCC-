@@ -673,6 +673,7 @@ mcc_tick(void *_vc)
 
 
     if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
+        if(vcpu_runnable(vc))
         __runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
     __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
@@ -1225,7 +1226,7 @@ static void
 csched_free_vdata(const struct scheduler *ops, void *priv)
 {
     struct csched_vcpu *svc = priv;
-    kill_timer(&svc->MCS_ticker); // MCS
+    kill_timer(&svc->mcc_ticker); // MCS
 
     BUG_ON( !list_empty(&svc->runq_elem) );
 
