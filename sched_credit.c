@@ -62,6 +62,9 @@
 #define CSCHED_PRI_TS_OVER      -2      /* time-share w/o credits */
 #define CSCHED_PRI_IDLE         -64     /* idle */
 
+#define MCC_UTIL_NORMALIZATION    1000000 // mcc
+
+
 
 /*
  * Flags
@@ -154,6 +157,13 @@ struct csched_pcpu {
 
     unsigned int tick;
     struct timer ticker;
+
+
+    unsigned mcc_cpu_mode; // criticality mode
+    unsigned  int mcc_u_1_1;// U1(1)
+    unsigned int mcc_u_2_1; // U2(1)
+    unsigned int mcc_u_2_2; // U2(2)
+
 };
 
 /*
@@ -173,6 +183,14 @@ struct csched_vcpu {
 
     atomic_t credit;
     unsigned int residual;
+
+
+    // mcc
+    s_time_t mcc_deadline;
+    s_time_t mcc_v_deadline; // virtual deadline
+    struct timer mcc_ticker;
+    unsigned int mcc_is_resident;
+    s_time_t mcc_cpu_consumption;
 
 #ifdef CSCHED_STATS
     struct {
@@ -197,6 +215,13 @@ struct csched_dom {
     uint16_t active_vcpu_count;
     uint16_t weight;
     uint16_t cap;
+
+    // mcc
+    unsigned int mcc_wcet_1;
+    unsigned int mcc_wcet_2;
+    unsigned int mcc_period;
+    unsigned mcc_crit_level;
+
 };
 
 /*
@@ -589,6 +614,12 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     BUG_ON(!is_idle_vcpu(curr_on_cpu(cpu)));
     cpumask_set_cpu(cpu, prv->idlers);
     spc->nr_runnable = 0;
+    // mcc
+    spc->mcc_cpu_mode = 1;
+    spc->mcc_u_1_1 = 0;
+    spc->mcc_u_2_1= 0;
+    spc->mcc_u_2_2=0;
+
 }
 
 static void
@@ -610,6 +641,52 @@ csched_init_pdata(const struct scheduler *ops, void *pdata, int cpu)
     init_pdata(prv, pdata, cpu);
     spin_unlock_irqrestore(&prv->lock, flags);
 }
+
+
+
+
+static void // mcc
+mcc_tick(void *_vc)
+{
+    struct vcpu *vc  = (struct vcpu *)_vc;
+    struct csched_vcpu *  svc = CSCHED_VCPU(vc);
+    struct csched_dom * sdom = svc->sdom;
+    unsigned int cpu = vc->processor;
+    struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+    unsigned  mcc_crit_level= sdom->mcc_crit_level;
+    unsigned int mcc_period = sdom->mcc_period;
+
+    if ( is_idle_domain(vc->domain))
+        return;
+
+    if (mcc_crit_level == 2 )
+    {
+        svc->mcc_deadline=  NOW() + MICROSECS(mcc_period);
+
+        svc->mcc_v_deadline= NOW() + MICROSECS((( spc->mcc_u_2_1  *  mcc_period) / (MCC_UTIL_NORMALIZATION - spc->mcc_u_1_1)));// fixme
+
+
+
+
+    }
+    else
+    {
+        svc->mcc_deadline=  NOW() + MICROSECS(mcc_period);
+        svc->mcc_v_deadline= NOW() + MICROSECS(mcc_period);
+
+    }
+
+   // svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+    svc->mcc_cpu_consumption = 0;
+
+
+    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
+        __runq_insert(svc);
+    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(mcc_period) );
+    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
+}
+
+
 
 /* Change the scheduler of cpu to us (Credit). */
 static void
@@ -1017,6 +1094,22 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->vcpu = vc;
     svc->pri = is_idle_domain(vc->domain) ?
                CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
+
+
+
+
+    svc->mcc_cpu_consumption =0;
+    svc->mcc_deadline = NOW() + MICROSECS(svc->sdom->mcc_period); //fixme
+    svc->mcc_v_deadline = NOW() + MICROSECS(svc->sdom->mcc_period); // fixme it should be calculated
+    svc->mcc_is_resident = 0;
+
+    if ( !is_idle_domain(vc->domain)) {
+        init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
+        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->sdom->mcc_period));
+    }
+
+
+
     SCHED_VCPU_STATS_RESET(svc);
     SCHED_STAT_CRANK(vcpu_alloc);
     return svc;
@@ -1289,6 +1382,12 @@ csched_alloc_domdata(const struct scheduler *ops, struct domain *dom)
     INIT_LIST_HEAD(&sdom->active_sdom_elem);
     sdom->dom = dom;
     sdom->weight = CSCHED_DEFAULT_WEIGHT;
+
+    sdom->mcc_crit_level = 1; // shoud we define this as a constant // fixme
+    sdom->mcc_period = 50000;
+    sdom->mcc_wcet_1 = 10000;
+    sdom->mcc_wcet_2= 20000;
+
 
     return (void *)sdom;
 }
