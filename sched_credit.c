@@ -680,10 +680,10 @@ mcc_tick(void *_vc)
     svc->mcc_cpu_consumption = 0;
 
 
-    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
+    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds late
         __runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(mcc_period) );
-    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
+   // __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
 }
 
 
@@ -1099,13 +1099,13 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
 
 
     svc->mcc_cpu_consumption =0;
-    svc->mcc_deadline = NOW() + MICROSECS(svc->sdom->mcc_period); //fixme
-    svc->mcc_v_deadline = NOW() + MICROSECS(svc->sdom->mcc_period); // fixme it should be calculated
+    svc->mcc_deadline = NOW() + MICROSECS(10000); //fixme
+    svc->mcc_v_deadline = NOW() + MICROSECS(10000); // fixme it should be calculated
     svc->mcc_is_resident = 0;
 
     if ( !is_idle_domain(vc->domain)) {
         init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
-        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->sdom->mcc_period));
+        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(1000));
     }
 
 
