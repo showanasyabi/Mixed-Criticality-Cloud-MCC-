@@ -143,6 +143,13 @@
 static int __read_mostly sched_credit_tslice_ms = CSCHED_DEFAULT_TSLICE_MS;
 integer_param("sched_credit_tslice_ms", sched_credit_tslice_ms);
 
+
+
+
+
+
+
+
 /*
  * Physical CPU
  */
@@ -365,14 +372,15 @@ __runq_insert(struct csched_vcpu *svc)
      * within 30ms if the queue too long. */
 
 
-    if ( test_bit(CSCHED_FLAG_VCPU_YIELD, &svc->flags)
+   /* if ( test_bit(CSCHED_FLAG_VCPU_YIELD, &svc->flags)
          && __runq_elem(iter)->pri > CSCHED_PRI_IDLE )
     {
         iter=iter->next;
 
-        /* Some sanity checks */
+       // Some sanity checks
         BUG_ON(iter == runq);
     }
+*/
 
     list_add_tail(&svc->runq_elem, iter);
 }
@@ -618,6 +626,14 @@ mcc_tick(void *_vc)
     svc->mcc_wcet_2 = sdom->mcc_wcet_2;
     svc->mcc_crit_level = sdom->mcc_crit_level;
     svc->mcc_period= sdom->mcc_period;
+
+
+    printk("[%i.%i] pri=%i flags=%x cpu=%i",
+           svc->vcpu->domain->domain_id,
+           svc->vcpu->vcpu_id,
+           svc->pri,
+           svc->flags,
+           svc->vcpu->processor);
 
     if (svc->mcc_crit_level == 2 )
     {
