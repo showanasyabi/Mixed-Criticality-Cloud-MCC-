@@ -614,7 +614,7 @@ mcc_tick(void *_vc) {
     struct csched_vcpu *svc = CSCHED_VCPU(vc);
     struct csched_dom *sdom;
     unsigned int cpu = vc->processor;
-    struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+  //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
 
     if (is_idle_domain(vc->domain))
@@ -626,7 +626,7 @@ mcc_tick(void *_vc) {
     svc->mcc_crit_level = sdom->mcc_crit_level;
     svc->mcc_period = sdom->mcc_period;
 
-    unsigned mcc_domid = vc->vcpu->domain->domain_id;
+    int mcc_domid = svc->vcpu->domain->domain_id;
 
     printk("[%i.%i] pri=%i flags=%x cpu=%i",
            svc->vcpu->domain->domain_id,
@@ -645,7 +645,7 @@ mcc_tick(void *_vc) {
         svc->mcc_crit_level = 1;
     svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-    svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+    svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
     svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
     svc->mcc_cpu_consumption = 0;
 
@@ -677,7 +677,7 @@ mcc_tick(void *_vc) {
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -693,7 +693,7 @@ mcc_tick(void *_vc) {
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -710,7 +710,7 @@ mcc_tick(void *_vc) {
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -997,8 +997,7 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit) {
     if(mcc_dom_id == 4 )
         return 5;
 
-
-
+return vc->processor;
 
 
 //    cpumask_t cpus;
@@ -1054,8 +1053,6 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit) {
 //    }
 //    return cpu;
 
-
-    if
 
 }
 
