@@ -314,39 +314,39 @@ dec_nr_runnable(unsigned int cpu)
     CSCHED_PCPU(cpu)->nr_runnable--;
 }
 
-unsigned int mcc_utli(struct csched_vcpu *svc, int mode) // it returns the utilization of a vCPU, which is between 0 and MCC_UTIL_NORMALIZATION(1000000)
-{
-    if (mode ==1)
-        return (svc->mcc_wcet_1 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
-    else
-        return (svc->mcc_wcet_2 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
-
-}
-
-
-static inline void
-mcc_dec_util(unsigned int cpu, struct csched_vcpu *svc )
-{
-    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
-    if(svc->mcc_crit_level == 2) {
-        CSCHED_PCPU(cpu)->mcc_u_2_1 -= mcc_utli(svc, 1);
-        CSCHED_PCPU(cpu)->mcc_u_2_2 -=  mcc_utli(svc, 2);
-    }
-    else
-        CSCHED_PCPU(cpu)->mcc_u_1_1 -= mcc_utli(svc, 1);
-}
-
-static inline void
-mcc_inc_util(unsigned int cpu, struct csched_vcpu *svc )
-{
-    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
-    if(svc->mcc_crit_level == 2) {
-        CSCHED_PCPU(cpu)->mcc_u_2_1 += mcc_utli(svc, 1);
-        CSCHED_PCPU(cpu)->mcc_u_2_2 += mcc_utli(svc, 2);
-    }
-    else
-        CSCHED_PCPU(cpu)->mcc_u_1_1 += mcc_utli(svc, 1);
-}
+//unsigned int mcc_utli(struct csched_vcpu *svc, int mode) // it returns the utilization of a vCPU, which is between 0 and MCC_UTIL_NORMALIZATION(1000000)
+//{
+//    if (mode ==1)
+//        return (svc->mcc_wcet_1 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+//    else
+//        return (svc->mcc_wcet_2 * MCC_UTIL_NORMALIZATION) / svc->mcc_period;
+//
+//}
+//
+//
+//static inline void
+//mcc_dec_util(unsigned int cpu, struct csched_vcpu *svc )
+//{
+//    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
+//    if(svc->mcc_crit_level == 2) {
+//        CSCHED_PCPU(cpu)->mcc_u_2_1 -= mcc_utli(svc, 1);
+//        CSCHED_PCPU(cpu)->mcc_u_2_2 -=  mcc_utli(svc, 2);
+//    }
+//    else
+//        CSCHED_PCPU(cpu)->mcc_u_1_1 -= mcc_utli(svc, 1);
+//}
+//
+//static inline void
+//mcc_inc_util(unsigned int cpu, struct csched_vcpu *svc )
+//{
+//    ASSERT(spin_is_locked(per_cpu(schedule_data, cpu).schedule_lock));
+//    if(svc->mcc_crit_level == 2) {
+//        CSCHED_PCPU(cpu)->mcc_u_2_1 += mcc_utli(svc, 1);
+//        CSCHED_PCPU(cpu)->mcc_u_2_2 += mcc_utli(svc, 2);
+//    }
+//    else
+//        CSCHED_PCPU(cpu)->mcc_u_1_1 += mcc_utli(svc, 1);
+//}
 
 
 
@@ -609,24 +609,24 @@ static inline void __mcc_runq_tickle(struct csched_vcpu *new)
 
 //mcc
 static void
-mcc_tick(void *_vc)
-{
-    struct vcpu *vc  = (struct vcpu *)_vc;
-    struct csched_vcpu *  svc = CSCHED_VCPU(vc);
-    struct csched_dom * sdom;
+mcc_tick(void *_vc) {
+    struct vcpu *vc = (struct vcpu *) _vc;
+    struct csched_vcpu *svc = CSCHED_VCPU(vc);
+    struct csched_dom *sdom;
     unsigned int cpu = vc->processor;
     struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
 
-    if ( is_idle_domain(vc->domain))
+    if (is_idle_domain(vc->domain))
         return;
 
     sdom = svc->sdom;
     svc->mcc_wcet_1 = sdom->mcc_wcet_1;
     svc->mcc_wcet_2 = sdom->mcc_wcet_2;
     svc->mcc_crit_level = sdom->mcc_crit_level;
-    svc->mcc_period= sdom->mcc_period;
+    svc->mcc_period = sdom->mcc_period;
 
+    unsigned mcc_domid = vc->vcpu->domain->domain_id;
 
     printk("[%i.%i] pri=%i flags=%x cpu=%i",
            svc->vcpu->domain->domain_id,
@@ -635,57 +635,88 @@ mcc_tick(void *_vc)
            svc->flags,
            svc->vcpu->processor);
 
-    if (svc->mcc_crit_level == 2 )
+
+    if (mcc_domid == 0)
     {
-        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline= NOW() + MICROSECS(((spc->mcc_u_2_1  *  svc->mcc_period) / (MCC_UTIL_NORMALIZATION - spc->mcc_u_1_1)));// fixme
+        svc->mcc_wcet_1 = 10000;
+        svc->mcc_wcet_2 = 10000;
+        svc->mcc_period = 10000;
+        svc->mcc_crit_level = 1;
+    svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-
-
-
-    }
-    else
-    {
-        svc->mcc_deadline=  NOW() + MICROSECS(svc->mcc_period);
-        svc->mcc_v_deadline= NOW() + MICROSECS(svc->mcc_period);
-
-    }
-
+    svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
     svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
     svc->mcc_cpu_consumption = 0;
 
-
-    // svc->MCS_elapsed_time = 0; // fixme
-
-    // if( is_idle_vcpu(vc))
-    //    return;  // should  I kill the timer here
-
-    // if ( (curr_on_cpu(vc->processor) == vc) )
-    // {
+}
 
 
 
-    // return;
-    // }
-    // if ( (__vcpu_on_runq(svc)) )
-    // {
-    //   if (prev_pri !=  svc->pri) // fixme
-    //   {
-    //      __runq_remove(svc);
-    //       __runq_insert(svc);
-    //  }
-    //}
+    if (mcc_domid == 1)
+    {
 
-    //   if ( likely(vcpu_runnable(vc)) )
-    //       SCHED_STAT_CRANK(vcpu_wake_runnable);
-    //   else
-    //     SCHED_STAT_CRANK(vcpu_wake_not_runnable);
+        svc->mcc_wcet_1 = 10000;
+        svc->mcc_wcet_2 = 10000;
+        svc->mcc_period = 10000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+    if (mcc_domid == 2)
+    {
+
+        svc->mcc_wcet_1 = 10000;
+        svc->mcc_wcet_2 = 10000;
+        svc->mcc_period = 10000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
+    if (mcc_domid == 3)
+    {
+
+        svc->mcc_wcet_1 = 10000;
+        svc->mcc_wcet_2 = 10000;
+        svc->mcc_period = 10000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
 
 
 
-    //if ( svc->MCS_temperature >= 1)
-    //  spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
+    if (mcc_domid == 4)
+    {
+
+        svc->mcc_wcet_1 = 10000;
+        svc->mcc_wcet_2 = 10000;
+        svc->mcc_period = 10000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
 
 
     if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
@@ -939,86 +970,92 @@ __csched_vcpu_is_migrateable(struct vcpu *vc, int dest_cpu, cpumask_t *mask)
 
 
 
-static int
-_mcc_schedulability_test(struct vcpu *vc, int cpu)
-{
-    struct csched_vcpu *  svc = CSCHED_VCPU(vc);
-    struct  csched_pcpu * spc = CSCHED_PCPU(cpu);
-    unsigned int u_1_1 = spc->mcc_u_1_1;
-    unsigned  int u_2_1 = spc->mcc_u_2_1;
-    unsigned int  u_2_2 = spc->mcc_u_2_2;
-    if (svc->mcc_crit_level == 2)
-    {
-        u_2_1 += mcc_utli(svc, 1);
-        u_2_2 += mcc_utli(svc, 2);
-    }
-    else
-    {
-        u_1_1 += mcc_utli(svc, 1);
-
-    }
-
-    if (((u_2_1 * u_1_1)/(MCC_UTIL_NORMALIZATION - u_1_1)) + u_2_2 <= MCC_UTIL_NORMALIZATION)
-        return 1;
-    else
-        return 0;
-
-}
 
 static int
 _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit) {
-    cpumask_t cpus;
-    cpumask_t *online;
-    int cpu = vc->processor;
-    int balance_step;
 
-    /* Store in cpus the mask of online cpus on which the domain can run */
-    online = cpupool_domain_cpumask(vc->domain);
-    cpumask_and(&cpus, vc->cpu_hard_affinity, online);
+    unsigned  mcc_dom_id = vc->domain->domain_id;
+    if(mcc_dom_id == 0 ) {
 
-    for_each_affinity_balance_step(balance_step)
-    {
-        if (balance_step == BALANCE_SOFT_AFFINITY
-            && !has_soft_affinity(vc, &cpus))
-            continue;
+        if(vc->vcpu_id == 0 )
+        return 0;
+        if(vcpu_id == 1)
+            return 1;
+        if(vcpu_id == 2)
+            return 2;
 
-        /* Pick an online CPU from the proper affinity mask */
-        affinity_balance_cpumask(vc, balance_step, &cpus);
-        cpumask_and(&cpus, &cpus, online);
-
-        /* If present, prefer vc's current processor */
-        cpu = cpumask_test_cpu(vc->processor, &cpus)
-              ? vc->processor
-              : cpumask_cycle(vc->processor,
-                              &cpus);// fixme. should  we change this to seacrh from the begining of the mask? (energy)
-        ASSERT(cpumask_test_cpu(cpu, &cpus));
-
-        if (_mcc_schedulability_test(vc, cpu))
-
-            return cpu; // we hate migration. we love the current cpu
-
-        else {
-            __cpumask_clear_cpu(cpu, &cpus);
-            if (cpumask_empty(&cpus))
-                return cpu; // we dont have any other options, so we have to return this CPU even though we know that it cannot accommodate the vCPU
-
-            while (!cpumask_empty(&cpus)) {
-                int nxt;
-                nxt = cpumask_cycle(cpu,
-                                    &cpus); // fixme. should we change this to search form the begining of the mask?
-
-                if (_mcc_schedulability_test(vc, nxt))
-                    return nxt;
-
-
-                __cpumask_clear_cpu(nxt, &cpus);
-
-            }
-        }
-        return cpu; // we are here because we could not find any approperiate vCPU, so we have to return the cpu
+        if(vcpu_id == 3)
+            return 3;
 
     }
-    return cpu;
+    if(mcc_dom_id == 1 )
+        return 5;
+    if(mcc_dom_id == 2 )
+        return 5;
+    if(mcc_dom_id == 3 )
+        return 5;
+    if(mcc_dom_id == 4 )
+        return 5;
+
+
+
+
+
+//    cpumask_t cpus;
+//    cpumask_t *online;
+//    int cpu = vc->processor;
+//    int balance_step;
+//
+//    /* Store in cpus the mask of online cpus on which the domain can run */
+//    online = cpupool_domain_cpumask(vc->domain);
+//    cpumask_and(&cpus, vc->cpu_hard_affinity, online);
+//
+//    for_each_affinity_balance_step(balance_step)
+//    {
+//        if (balance_step == BALANCE_SOFT_AFFINITY
+//            && !has_soft_affinity(vc, &cpus))
+//            continue;
+//
+//        /* Pick an online CPU from the proper affinity mask */
+//        affinity_balance_cpumask(vc, balance_step, &cpus);
+//        cpumask_and(&cpus, &cpus, online);
+//
+//        /* If present, prefer vc's current processor */
+//        cpu = cpumask_test_cpu(vc->processor, &cpus)
+//              ? vc->processor
+//              : cpumask_cycle(vc->processor,
+//                              &cpus);// fixme. should  we change this to seacrh from the begining of the mask? (energy)
+//        ASSERT(cpumask_test_cpu(cpu, &cpus));
+//
+//        if (_mcc_schedulability_test(vc, cpu))
+//
+//            return cpu; // we hate migration. we love the current cpu
+//
+//        else {
+//            __cpumask_clear_cpu(cpu, &cpus);
+//            if (cpumask_empty(&cpus))
+//                return cpu; // we dont have any other options, so we have to return this CPU even though we know that it cannot accommodate the vCPU
+//
+//            while (!cpumask_empty(&cpus)) {
+//                int nxt;
+//                nxt = cpumask_cycle(cpu,
+//                                    &cpus); // fixme. should we change this to search form the begining of the mask?
+//
+//                if (_mcc_schedulability_test(vc, nxt))
+//                    return nxt;
+//
+//
+//                __cpumask_clear_cpu(nxt, &cpus);
+//
+//            }
+//        }
+//        return cpu; // we are here because we could not find any approperiate vCPU, so we have to return the cpu
+//
+//    }
+//    return cpu;
+
+
+    if
 
 }
 
@@ -1150,8 +1187,8 @@ csched_vcpu_acct(struct csched_private *prv, unsigned int cpu)
         {
 
 
-            mcc_dec_util(cpu, svc);
-            svc->mcc_is_resident = 0;
+            //mcc_dec_util(cpu, svc);
+           //svc->mcc_is_resident = 0;
 
 
             SCHED_VCPU_STAT_CRANK(svc, migrate_r);
@@ -1224,11 +1261,11 @@ csched_vcpu_insert(const struct scheduler *ops, struct vcpu *vc)
 
     lock = vcpu_schedule_lock_irq(vc);
 
-    if(svc->mcc_is_resident == 0) //fixme is it the best way for having conditional variables
-    {
-        svc->mcc_is_resident=1;
-        mcc_inc_util(vc->processor, svc);
-    }
+//    if(svc->mcc_is_resident == 0) //fixme is it the best way for having conditional variables
+//    {
+//        svc->mcc_is_resident=1;
+//        mcc_inc_util(vc->processor, svc);
+//    }
 
     if ( !__vcpu_on_runq(svc) && vcpu_runnable(vc) && !vc->is_running )
         runq_insert(svc);
