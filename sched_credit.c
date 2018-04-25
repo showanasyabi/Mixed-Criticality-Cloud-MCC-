@@ -409,8 +409,8 @@ runq_remove(struct csched_vcpu *svc)
 static void burn_credits(struct csched_vcpu *svc, s_time_t now)
 {
     s_time_t delta;
-    //  uint64_t val;
-    //unsigned int credits;
+    uint64_t val;
+    unsigned int credits;
 
     /* Assert svc is current */
     ASSERT( svc == CSCHED_VCPU(curr_on_cpu(svc->vcpu->processor)) );
@@ -418,36 +418,13 @@ static void burn_credits(struct csched_vcpu *svc, s_time_t now)
     if ( (delta = now - svc->start_time) <= 0 )
         return;
 
+    val = delta * CSCHED_CREDITS_PER_MSEC + svc->residual;
+    svc->residual = do_div(val, MILLISECS(1));
+    credits = val;
+    ASSERT(credits == val); /* make sure we haven't truncated val */
+    atomic_sub(credits, &svc->credit);
+    svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
 
-    svc->mcc_cpu_consumption += delta;
-    if (svc->mcc_crit_level == 1)
-    {
-        if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_1) )
-        {
-            svc->pri= CSCHED_PRI_TS_OVER;
-        }
-        else
-            svc->pri= CSCHED_PRI_TS_UNDER;
-    }
-    else // criticality 2
-    {
-        if(svc->mcc_cpu_consumption >= MICROSECS(svc->mcc_wcet_2) )
-        {
-            svc->pri= CSCHED_PRI_TS_OVER;
-        }
-        else
-
-            svc->pri= CSCHED_PRI_TS_UNDER;
-    }
-
-
-    //val = delta * CSCHED_CREDITS_PER_MSEC + svc->residual;
-    // svc->residual = do_div(val, MILLISECS(1));
-    // credits = val;
-    //ASSERT(credits == val); /* make sure we haven't truncated val */
-    //atomic_sub(credits, &svc->credit);
-    //svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
-    svc->start_time += delta;
 }
 
 static bool_t __read_mostly opt_tickle_one_idle = 1;
@@ -613,7 +590,7 @@ mcc_tick(void *_vc) {
     struct vcpu *vc = (struct vcpu *) _vc;
     struct csched_vcpu *svc = CSCHED_VCPU(vc);
     struct csched_dom *sdom;
-    unsigned int cpu = vc->processor;
+    //unsigned int cpu = vc->processor;
   //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
     int mcc_domid = svc->vcpu->domain->domain_id;
@@ -642,9 +619,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 0)
     {
 
-        svc->mcc_wcet_1 = 10000;
-        svc->mcc_wcet_2 = 10000;
-        svc->mcc_period = 10000;
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
     svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
@@ -659,9 +636,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 1)
     {
 
-        svc->mcc_wcet_1 = 10000;
-        svc->mcc_wcet_2 = 10000;
-        svc->mcc_period = 10000;
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
@@ -674,9 +651,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 2)
     {
 
-        svc->mcc_wcet_1 = 10000;
-        svc->mcc_wcet_2 = 10000;
-        svc->mcc_period = 10000;
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
@@ -690,9 +667,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 3)
     {
 
-        svc->mcc_wcet_1 = 10000;
-        svc->mcc_wcet_2 = 10000;
-        svc->mcc_period = 10000;
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
@@ -707,9 +684,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 4)
     {
 
-        svc->mcc_wcet_1 = 10000;
-        svc->mcc_wcet_2 = 10000;
-        svc->mcc_period = 10000;
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
