@@ -185,6 +185,19 @@ struct csched_vcpu {
     s_time_t start_time;   /* When we were scheduled (used for credit) */
     unsigned flags;
     int16_t pri;
+
+    //MCC
+    s_time_t mcc_deadline;
+    s_time_t mcc_v_deadline; // virtual deadline
+    unsigned int mcc_wcet_1;
+    unsigned int mcc_wcet_2;
+    unsigned int mcc_period;
+    unsigned mcc_crit_level;
+    struct timer mcc_ticker;
+    s_time_t mcc_elapsed_time;
+    unsigned int mcc_is_resident;
+    s_time_t mcc_cpu_consumption;
+
 #ifdef CSCHED_STATS
     struct {
         int credit_last;
@@ -257,6 +270,130 @@ static inline bool_t is_runq_idle(unsigned int cpu)
     return list_empty(RUNQ(cpu)) ||
            is_idle_vcpu(__runq_elem(RUNQ(cpu)->next)->vcpu);
 }
+
+
+
+static void
+mcc_tick(void *_vc) {
+    struct vcpu *vc = (struct vcpu *) _vc;
+    struct csched_vcpu *svc = CSCHED_VCPU(vc);
+    struct csched_dom *sdom;
+    //unsigned int cpu = vc->processor;
+    //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
+
+    int mcc_domid = svc->vcpu->domain->domain_id;
+
+
+
+    if (is_idle_domain(vc->domain))
+        return;
+
+    sdom = svc->sdom;
+    svc->mcc_wcet_1 = sdom->mcc_wcet_1;
+    svc->mcc_wcet_2 = sdom->mcc_wcet_2;
+    svc->mcc_crit_level = sdom->mcc_crit_level;
+    svc->mcc_period = sdom->mcc_period;
+
+
+
+    printk("[%i.%i] pri=%i flags=%x cpu=%i",
+           svc->vcpu->domain->domain_id,
+           svc->vcpu->vcpu_id,
+           svc->pri,
+           svc->flags,
+           svc->vcpu->processor);
+
+
+    if (mcc_domid == 0)
+    {
+
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
+
+    if (mcc_domid == 1)
+    {
+
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+    if (mcc_domid == 2)
+    {
+
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
+    if (mcc_domid == 3)
+    {
+
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
+
+    if (mcc_domid == 4)
+    {
+
+        svc->mcc_wcet_1 = 100000;
+        svc->mcc_wcet_2 = 100000;
+        svc->mcc_period = 100000;
+        svc->mcc_crit_level = 1;
+        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
+        svc->mcc_cpu_consumption = 0;
+
+    }
+
+
+
+
+    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
+        if(vcpu_runnable(vc))
+            __runq_insert(svc);
+    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
+    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
+}
+
 
 static inline void
 __runq_insert(struct csched_vcpu *svc)
@@ -774,6 +911,25 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->pri = is_idle_domain(vc->domain) ?
                CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
     SCHED_VCPU_STATS_RESET(svc);
+
+
+    svc->mcc_period = 50000; // fixme
+    svc->mcc_wcet_1 =  10000;
+    svc->mcc_wcet_2 =   20000;
+    svc->mcc_crit_level =1;
+    svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
+    svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
+    svc->mcc_is_resident = 0;
+    svc->mcc_cpu_consumption= 0;
+
+
+    if ( !is_idle_domain(vc->domain)) {
+        init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
+        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
+    }
+
+
+
     SCHED_STAT_CRANK(vcpu_alloc);
     return svc;
 }
