@@ -616,6 +616,9 @@ mcc_tick(void *_vc) {
     unsigned int cpu = vc->processor;
   //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
+    int mcc_domid = svc->vcpu->domain->domain_id;
+
+
 
     if (is_idle_domain(vc->domain))
         return;
@@ -626,7 +629,7 @@ mcc_tick(void *_vc) {
     svc->mcc_crit_level = sdom->mcc_crit_level;
     svc->mcc_period = sdom->mcc_period;
 
-    int mcc_domid = svc->vcpu->domain->domain_id;
+
 
     printk("[%i.%i] pri=%i flags=%x cpu=%i",
            svc->vcpu->domain->domain_id,
@@ -662,7 +665,7 @@ mcc_tick(void *_vc) {
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline = NOW() = MICROSECS(svc->mcc_period);
+        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -979,12 +982,12 @@ _mcc_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit) {
 
         if(vc->vcpu_id == 0 )
         return 0;
-        if(vcpu_id == 1)
+        if(vc->vcpu_id == 1)
             return 1;
-        if(vcpu_id == 2)
+        if(vc->vcpu_id == 2)
             return 2;
 
-        if(vcpu_id == 3)
+        if(vc->vcpu_id == 3)
             return 3;
 
     }
