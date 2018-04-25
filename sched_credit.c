@@ -288,11 +288,7 @@ mcc_tick(void *_vc) {
     if (is_idle_domain(vc->domain))
         return;
 
-    sdom = svc->sdom;
-    svc->mcc_wcet_1 = sdom->mcc_wcet_1;
-    svc->mcc_wcet_2 = sdom->mcc_wcet_2;
-    svc->mcc_crit_level = sdom->mcc_crit_level;
-    svc->mcc_period = sdom->mcc_period;
+    
 
 
 
@@ -465,6 +461,7 @@ static inline int __vcpu_has_soft_affinity(const struct vcpu *vc,
  * filtered out from the result, to avoid running a vcpu where it would
  * like, but is not allowed to!
  */
+/*
 static void
 csched_balance_cpumask(const struct vcpu *vc, int step, cpumask_t *mask)
 {
@@ -475,9 +472,10 @@ csched_balance_cpumask(const struct vcpu *vc, int step, cpumask_t *mask)
         if ( unlikely(cpumask_empty(mask)) )
             cpumask_copy(mask, vc->cpu_hard_affinity);
     }
-    else /* step == CSCHED_BALANCE_HARD_AFFINITY */
+    else // step == CSCHED_BALANCE_HARD_AFFINITY
         cpumask_copy(mask, vc->cpu_hard_affinity);
 }
+ */
 
 static void burn_credits(struct csched_vcpu *svc, s_time_t now)
 {
