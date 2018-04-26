@@ -1330,70 +1330,76 @@ static  unsigned int pcpu_is_hot(int cpu)
 
 
 
-static struct csched_vcpu *
-__the_fisrt_active_HI_crit_vCPU_with_earliest_deadline(int cpu)
+
+
+static struct  csched_vcpu *
+mcc_earliest_deadline_vcpu(int cpu)
 {
-
-    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head * const runq = RUNQ(cpu);
+    struct csched_vcpu *snext;
     struct list_head *iter;
-    struct csched_vcpu *  iter_svc = NULL;
-    struct csched_vcpu *  selected_svc = NULL;
-    //struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
-    // s_time_t MCS_current_deadline;
+    snext= __runq_elem(runq->next);
+    if(snext->pri == CSCHED_PRI_IDLE)
+        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
 
-    list_for_each( iter, runq )
-    {
-        iter_svc = __runq_elem(iter);
-        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
-            //if ( svc->pri > iter_svc->pri)
+    snext =NULL;
+
+
+
+        list_for_each( iter, runq )
         {
-           // if (iter_svc->MCS_temperature > 0)
-            //    spc->mcs_hot = 1;
-            if  ( selected_svc == NULL)
-                selected_svc=iter_svc;
-            else
-                iter_svc->mcc_deadline < selected_svc ->mcc_deadline;
+            struct csched_vcpu *  iter_svc = __runq_elem(iter);
+
+            if (snext == NULL && iter_svc->mcc_crit_level == 2)
+            {
+
+
+                snext= iter_svc;
+                continue;
+            }
+
+
+            if ( iter_svc->pri >= snext->pri && iter_svc->mcc_deadline < snext->mcc_deadline &&  iter_svc->mcc_crit_level == 2 )
+
+
+                snext = iter_svc;
+
 
         }
 
-    }
 
-    return selected_svc;
+    return snext;
 }
 
 
-
-
-static struct csched_vcpu *
-__the_fisrt_active_HI_crit_vCPU_with_earliest_virtual_deadline(int cpu)
+static struct  csched_vcpu *
+mcc_earliest__virtual_deadline_vcpu(int cpu)
 {
-
-    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head * const runq = RUNQ(cpu);
+    struct csched_vcpu *snext;
     struct list_head *iter;
-    struct csched_vcpu *  iter_svc = NULL;
-    struct csched_vcpu *  selected_svc = NULL;
-    //struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
-    // s_time_t MCS_current_deadline;
+    snext= __runq_elem(runq->next);
+    if(snext->pri == CSCHED_PRI_IDLE)
+        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
 
     list_for_each( iter, runq )
     {
-        iter_svc = __runq_elem(iter);
-        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
-            //if ( svc->pri > iter_svc->pri)
-        {
-            // if (iter_svc->MCS_temperature > 0)
-            //    spc->mcs_hot = 1;
-            if  ( selected_svc == NULL)
-                selected_svc=iter_svc;
-            else
-                iter_svc->mcc_deadline < selected_svc ->mcc_deadline;
+        struct csched_vcpu *  iter_svc = __runq_elem(iter);
 
-        }
+
+        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+
+
+            snext = iter_svc;
+
 
     }
 
-    return selected_svc;
+
+    return snext;
 }
+
+
 
 
 
@@ -1547,7 +1553,7 @@ else
 
     if (spc->mcc_cpu_mode == 2)
     {
-        snext = __the_fisrt_active_HI_crit_vCPU_with_earliest_deadline(cpu);
+        snext = mcc_earliest__virtual_deadline_vcpu(cpu);
         if (snext != NULL )
         {
             //__runq_remove(snext);
@@ -1565,7 +1571,7 @@ else
 
     if (spc->mcc_cpu_mode == 1)
     {
-        snext = __the_fisrt_active_HI_crit_vCPU_with_earliest_virtual_deadline(runq->next);
+        snext = mcc_earliest_deadline_vcpu(cpu);
         // __runq_remove(snext);
 
         if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
