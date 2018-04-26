@@ -170,6 +170,16 @@ struct csched_pcpu {
     struct timer ticker;
     unsigned int tick;
     unsigned int idle_bias;
+
+
+    unsigned mcc_cpu_mode; // criticality mode
+    unsigned  int mcc_u_1_1;// U1(1)
+    unsigned int mcc_u_2_1; // U2(1)
+    unsigned int mcc_u_2_2; // U2(2)
+
+
+
+
 };
 
 /*
@@ -197,6 +207,7 @@ struct csched_vcpu {
     s_time_t mcc_elapsed_time;
     unsigned int mcc_is_resident;
     s_time_t mcc_cpu_consumption;
+    long mcc_temperature;
 
 #ifdef CSCHED_STATS
     struct {
@@ -329,7 +340,7 @@ mcc_tick(void *_vc) {
 
 
 
-    printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:lu \n",
+    printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:%lu \n",
            svc->vcpu->domain->domain_id,
            svc->vcpu->vcpu_id,
            svc->pri,
@@ -341,8 +352,8 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 0)
     {
 
-        svc->mcc_wcet_1 = 100000;
-        svc->mcc_wcet_2 = 100000;
+        svc->mcc_wcet_1 = 30000;
+        svc->mcc_wcet_2 = 50000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -358,8 +369,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 1)
     {
 
-        svc->mcc_wcet_1 = 100000;
-        svc->mcc_wcet_2 = 100000;
+
+        svc->mcc_wcet_1 = 30000;
+        svc->mcc_wcet_2 = 50000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -373,8 +385,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 2)
     {
 
-        svc->mcc_wcet_1 = 100000;
-        svc->mcc_wcet_2 = 100000;
+
+        svc->mcc_wcet_1 = 30000;
+        svc->mcc_wcet_2 = 50000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -389,8 +402,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 3)
     {
 
-        svc->mcc_wcet_1 = 100000;
-        svc->mcc_wcet_2 = 100000;
+
+        svc->mcc_wcet_1 = 30000;
+        svc->mcc_wcet_2 = 50000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -406,8 +420,9 @@ mcc_tick(void *_vc) {
     if (mcc_domid == 4)
     {
 
-        svc->mcc_wcet_1 = 100000;
-        svc->mcc_wcet_2 = 100000;
+
+        svc->mcc_wcet_1 = 30000;
+        svc->mcc_wcet_2 = 50000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -613,6 +628,14 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     INIT_LIST_HEAD(&spc->runq);
     spc->runq_sort_last = prv->runq_sort;
     spc->idle_bias = nr_cpu_ids - 1;
+
+
+
+
+    spc->mcc_cpu_mode = 1;
+    spc->mcc_u_1_1 = 0;
+    spc->mcc_u_2_1= 0;
+    spc->mcc_u_2_2=0;
 
     /* Start off idling... */
     BUG_ON(!is_idle_vcpu(curr_on_cpu(cpu)));
@@ -931,6 +954,7 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
     svc->mcc_is_resident = 0;
     svc->mcc_cpu_consumption= 0;
+    svc->mcc_temperature =0 ;
 
 
     if ( !is_idle_domain(vc->domain)) {
@@ -1274,6 +1298,70 @@ csched_tick(void *_cpu)
  * This function is in the critical path. It is designed to be simple and
  * fast for the common case.
  */
+
+
+
+
+static  unsigned int pcpu_is_hot(int cpu)
+{
+
+    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head *iter;
+    struct csched_vcpu *  iter_svc = NULL;
+
+
+    list_for_each( iter, runq )
+    {
+        iter_svc = __runq_elem(iter);
+        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
+        {
+            if (iter_svc->mcc_temperature > 0)
+                return   1;
+
+        }
+
+    }
+
+
+
+
+    return 0;
+}
+
+
+
+static struct csched_vcpu *
+__the_fisrt_active_HI_crit_vCPU(int cpu)
+{
+
+    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head *iter;
+    struct csched_vcpu *  iter_svc = NULL;
+    struct csched_vcpu *  selected_svc = NULL;
+    struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
+    // s_time_t MCS_current_deadline;
+
+    list_for_each( iter, runq )
+    {
+        iter_svc = __runq_elem(iter);
+        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
+            //if ( svc->pri > iter_svc->pri)
+        {
+           // if (iter_svc->MCS_temperature > 0)
+            //    spc->mcs_hot = 1;
+            if  ( selected_svc == NULL)
+                selected_svc=iter_svc;
+        }
+
+    }
+
+    return selected_svc;
+}
+
+
+
+
+long H=0;
 static struct task_slice
 csched_schedule(
         const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
@@ -1285,6 +1373,7 @@ csched_schedule(
     struct csched_vcpu *snext;
     struct task_slice ret;
     s_time_t runtime, tslice;
+    struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
 
     SCHED_STAT_CRANK(schedule);
     CSCHED_VCPU_CHECK(current);
@@ -1297,6 +1386,35 @@ csched_schedule(
     {
         /* Update credits of a non-idle VCPU. */
         burn_credits(scurr, now);
+
+        //MCS
+        if (scurr->mcc_crit_level == 2)
+        {
+            if (scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_2))
+            {
+                scurr->pri = CSCHED_PRI_TS_OVER;
+
+            }
+            //else
+            if ((scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_1)) &   (vcpu_runnable(current)) )
+                //else if ((scurr->MCS_elapsed_time >= MICROSECS(5)) &   (vcpu_runnable(current)) )
+            {
+
+                scurr-> mcc_temperature = H; // fixme
+
+            }
+
+
+
+        }
+        if (scurr->mcc_crit_level == 1)
+        {
+            if (scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_1))
+                scurr->pri = CSCHED_PRI_TS_OVER;
+
+        }
+
+
         scurr->start_time -= now;
     }
     else
@@ -1319,6 +1437,8 @@ csched_schedule(
 
     /* If we have schedule rate limiting enabled, check to see
      * how long we've run for. */
+
+    /*
     if ( !tasklet_work_scheduled
          && prv->ratelimit_us
          && vcpu_runnable(current)
@@ -1328,19 +1448,20 @@ csched_schedule(
         snext = scurr;
         snext->start_time += now;
         perfc_incr(delay_ms);
-        /*
-         * Next timeslice must last just until we'll have executed for
-         * ratelimit_us. However, to avoid setting a really short timer, which
-         * will most likely be inaccurate and counterproductive, we never go
-         * below CSCHED_MIN_TIMER.
-         */
+
+         // Next timeslice must last just until we'll have executed for
+         // ratelimit_us. However, to avoid setting a really short timer, which
+         // will most likely be inaccurate and counterproductive, we never go
+         // below CSCHED_MIN_TIMER.
+
         tslice = MICROSECS(prv->ratelimit_us) - runtime;
         if ( unlikely(runtime < CSCHED_MIN_TIMER) )
             tslice = CSCHED_MIN_TIMER;
         ret.migrated = 0;
         goto out;
     }
-    tslice = MILLISECS(prv->tslice_ms);
+*/
+    //tslice = MILLISECS(prv->tslice_ms);
 
     /*
      * Select next runnable local VCPU (ie top of local runq)
@@ -1350,21 +1471,11 @@ csched_schedule(
     else
         BUG_ON( is_idle_vcpu(current) || list_empty(runq) );
 
-    snext = __runq_elem(runq->next);
-    ret.migrated = 0;
+    // snext = __runq_elem(runq->next);
+    // ret.migrated = 0;
 
     /* Tasklet work (which runs in idle VCPU context) overrides all else. */
-    if ( tasklet_work_scheduled )
-    {
-        TRACE_0D(TRC_CSCHED_SCHED_TASKLET);
-        snext = CSCHED_VCPU(idle_vcpu[cpu]);
-        snext->pri = CSCHED_PRI_TS_BOOST;
-    }
 
-    /*
-     * Clear YIELD flag before scheduling out
-     */
-    clear_bit(CSCHED_FLAG_VCPU_YIELD, &scurr->flags);
 
     /*
      * SMP Load balance:
@@ -1374,10 +1485,77 @@ csched_schedule(
      * urgent work... If not, csched_load_balance() will return snext, but
      * already removed from the runq.
      */
-   // if ( snext->pri > CSCHED_PRI_TS_OVER )
-        __runq_remove(snext);
-   // else
-        //snext = csched_load_balance(prv, cpu, snext, &ret.migrated);
+    // if ( snext->pri > CSCHED_PRI_TS_OVER ) MCS
+
+    snext = __runq_elem(runq->next);
+    // snext = CSCHED_VCPU(idle_vcpu[cpu]);
+    ret.migrated = 0;
+
+    tslice = MILLISECS(3); // fixme
+
+    if (pcpu_is_hot(cpu))
+    {
+        spc->mcc_cpu_mode = 2;
+    }
+else
+        spc->mcc_cpu_mode = 1;
+
+
+
+
+    if (spc->mcc_cpu_mode == 2)
+    {
+        snext = __the_fisrt_active_HI_crit_vCPU(cpu);
+        if (snext != NULL )
+        {
+            //__runq_remove(snext);
+            tslice =MICROSECS (snext->mcc_wcet_2) - snext->mcc_cpu_consumption;
+        }
+        //else
+       // {
+            //if (spc->mcs_hot == 0   )
+
+           // spc->MCS_CPU_mode = MCS_LOW_CRI_MODE;
+       // }
+
+
+    }
+
+    if (spc->mcc_cpu_mode == 1)
+    {
+        snext = __runq_elem(runq->next);
+        // __runq_remove(snext);
+
+        if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
+            tslice = MILLISECS(3); // fixme
+        else
+            tslice = MICROSECS(snext->mcc_wcet_1) - snext->mcc_cpu_consumption;
+
+    }
+
+
+    if ( tasklet_work_scheduled )
+    {
+        TRACE_0D(TRC_CSCHED_SCHED_TASKLET);
+        snext = CSCHED_VCPU(idle_vcpu[cpu]);
+        snext->pri = CSCHED_PRI_TS_BOOST;
+        tslice = MILLISECS(prv->tslice_ms);
+    }
+
+    /*
+     * Clear YIELD flag before scheduling out
+     */
+    clear_bit(CSCHED_FLAG_VCPU_YIELD, &scurr->flags);
+
+
+    //if ( snext->pri >= CSCHED_PRI_TS_OVER )
+
+    if (snext== NULL)
+        snext = CSCHED_VCPU(idle_vcpu[cpu]);
+    __runq_remove(snext);
+
+    // else
+    // snext = csched_load_balance(prv, cpu, snext, &ret.migrated); MCS
 
     /*
      * Update idlers mask if necessary. When we're idling, other CPUs
@@ -1396,10 +1574,15 @@ csched_schedule(
     if ( !is_idle_vcpu(snext->vcpu) )
         snext->start_time += now;
 
-    out:
+
+    // tslice = snext->MCS_WCET - snext->MCS_elapsed_time; //mcs3
+
+//out:
     /*
      * Return task to run next...
      */
+
+//MCS
     ret.time = (is_idle_vcpu(snext->vcpu) ?
                 -1 : tslice);
     ret.task = snext->vcpu;
@@ -1407,7 +1590,6 @@ csched_schedule(
     CSCHED_VCPU_CHECK(ret.task);
     return ret;
 }
-
 static void
 csched_dump_vcpu(struct csched_vcpu *svc)
 {
