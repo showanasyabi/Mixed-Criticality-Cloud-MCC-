@@ -1331,14 +1331,14 @@ static  unsigned int pcpu_is_hot(int cpu)
 
 
 static struct csched_vcpu *
-__the_fisrt_active_HI_crit_vCPU(int cpu)
+__the_fisrt_active_HI_crit_vCPU_with_earliest_deadline(int cpu)
 {
 
     const struct list_head * const runq = RUNQ(cpu);
     struct list_head *iter;
     struct csched_vcpu *  iter_svc = NULL;
     struct csched_vcpu *  selected_svc = NULL;
-    struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
+    //struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
     // s_time_t MCS_current_deadline;
 
     list_for_each( iter, runq )
@@ -1351,12 +1351,54 @@ __the_fisrt_active_HI_crit_vCPU(int cpu)
             //    spc->mcs_hot = 1;
             if  ( selected_svc == NULL)
                 selected_svc=iter_svc;
+            else
+                iter_svc->mcc_deadline < selected_svc ->mcc_deadline;
+
         }
 
     }
 
     return selected_svc;
 }
+
+
+
+
+static struct csched_vcpu *
+__the_fisrt_active_HI_crit_vCPU_with_earliest_virtual_deadline(int cpu)
+{
+
+    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head *iter;
+    struct csched_vcpu *  iter_svc = NULL;
+    struct csched_vcpu *  selected_svc = NULL;
+    //struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
+    // s_time_t MCS_current_deadline;
+
+    list_for_each( iter, runq )
+    {
+        iter_svc = __runq_elem(iter);
+        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
+            //if ( svc->pri > iter_svc->pri)
+        {
+            // if (iter_svc->MCS_temperature > 0)
+            //    spc->mcs_hot = 1;
+            if  ( selected_svc == NULL)
+                selected_svc=iter_svc;
+            else
+                iter_svc->mcc_deadline < selected_svc ->mcc_deadline;
+
+        }
+
+    }
+
+    return selected_svc;
+}
+
+
+
+
+
 
 
 
@@ -1505,7 +1547,7 @@ else
 
     if (spc->mcc_cpu_mode == 2)
     {
-        snext = __the_fisrt_active_HI_crit_vCPU(cpu);
+        snext = __the_fisrt_active_HI_crit_vCPU_with_earliest_deadline(cpu);
         if (snext != NULL )
         {
             //__runq_remove(snext);
@@ -1523,7 +1565,7 @@ else
 
     if (spc->mcc_cpu_mode == 1)
     {
-        snext = __runq_elem(runq->next);
+        snext = __the_fisrt_active_HI_crit_vCPU_with_earliest_virtual_deadline(runq->next);
         // __runq_remove(snext);
 
         if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
