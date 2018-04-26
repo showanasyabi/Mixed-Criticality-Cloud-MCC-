@@ -338,15 +338,18 @@ mcc_tick(void *_vc) {
 
 
 
+    if(svc->mcc_crit_level == 2 && svc->mcc_temperature > 0 && (svc->mcc_cpu_consumption  <= MICROSECS(svc->mcc_wcet_1)))
+        svc->mcc_temperature--;
 
 
-    printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:%lu \n",
+        printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:%lu, temperature:%i \n",
            svc->vcpu->domain->domain_id,
            svc->vcpu->vcpu_id,
            svc->pri,
            svc->flags,
            svc->vcpu->processor,
-    svc->mcc_cpu_consumption);
+    svc->mcc_cpu_consumption,
+        svc->mcc_temperature);
 
 
     if (mcc_domid == 0)
@@ -370,13 +373,15 @@ mcc_tick(void *_vc) {
     {
 
 
-        svc->mcc_wcet_1 = 30000;
-        svc->mcc_wcet_2 = 50000;
+        svc->mcc_wcet_1 = 1000;
+        svc->mcc_wcet_2 = 25000;
         svc->mcc_period = 100000;
-        svc->mcc_crit_level = 1;
+        svc->mcc_crit_level = 2;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+       // svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
+
+        vc->mcc_v_deadline = NOW() + MICROSECS(4);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -386,8 +391,8 @@ mcc_tick(void *_vc) {
     {
 
 
-        svc->mcc_wcet_1 = 30000;
-        svc->mcc_wcet_2 = 50000;
+        svc->mcc_wcet_1 = 25000;
+        svc->mcc_wcet_2 = 25000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -403,8 +408,8 @@ mcc_tick(void *_vc) {
     {
 
 
-        svc->mcc_wcet_1 = 30000;
-        svc->mcc_wcet_2 = 50000;
+        svc->mcc_wcet_1 = 25000;
+        svc->mcc_wcet_2 = 25000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -421,8 +426,8 @@ mcc_tick(void *_vc) {
     {
 
 
-        svc->mcc_wcet_1 = 30000;
-        svc->mcc_wcet_2 = 50000;
+        svc->mcc_wcet_1 = 25000;
+        svc->mcc_wcet_2 = 25000;
         svc->mcc_period = 100000;
         svc->mcc_crit_level = 1;
         svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
@@ -432,6 +437,9 @@ mcc_tick(void *_vc) {
         svc->mcc_cpu_consumption = 0;
 
     }
+
+
+
 
 
 
@@ -1553,7 +1561,7 @@ else
 
     if (spc->mcc_cpu_mode == 2)
     {
-        snext = mcc_earliest__virtual_deadline_vcpu(cpu);
+        snext = mcc_earliest_deadline_vcpu(cpu);
         if (snext != NULL )
         {
             //__runq_remove(snext);
@@ -1571,7 +1579,7 @@ else
 
     if (spc->mcc_cpu_mode == 1)
     {
-        snext = mcc_earliest_deadline_vcpu(cpu);
+        snext = mcc_earliest__virtual_deadline_vcpu(cpu);
         // __runq_remove(snext);
 
         if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
