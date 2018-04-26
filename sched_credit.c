@@ -246,6 +246,8 @@ struct csched_private {
 };
 
 static void csched_tick(void *_cpu);
+static inline void __runq_tickle(struct csched_vcpu *new);
+
 
 static inline int
 __vcpu_on_runq(struct csched_vcpu *svc)
@@ -273,11 +275,46 @@ static inline bool_t is_runq_idle(unsigned int cpu)
 
 
 
+
+
+
+static inline void
+__runq_insert(struct csched_vcpu *svc)
+{
+    const struct list_head * const runq = RUNQ(svc->vcpu->processor);
+    struct list_head *iter;
+
+    BUG_ON( __vcpu_on_runq(svc) );
+
+    list_for_each( iter, runq )
+    {
+        const struct csched_vcpu * const iter_svc = __runq_elem(iter);
+        if ( svc->pri > iter_svc->pri )
+            break;
+    }
+
+    /* If the vcpu yielded, try to put it behind one lower-priority
+     * runnable vcpu if we can.  The next runq_sort will bring it forward
+     * within 30ms if the queue too long. */
+    if ( test_bit(CSCHED_FLAG_VCPU_YIELD, &svc->flags)
+         && __runq_elem(iter)->pri > CSCHED_PRI_IDLE )
+    {
+        iter=iter->next;
+
+        /* Some sanity checks */
+        BUG_ON(iter == runq);
+    }
+
+    list_add_tail(&svc->runq_elem, iter);
+}
+
+
+
 static void
 mcc_tick(void *_vc) {
     struct vcpu *vc = (struct vcpu *) _vc;
     struct csched_vcpu *svc = CSCHED_VCPU(vc);
-    struct csched_dom *sdom;
+    //struct csched_dom *sdom;
     //unsigned int cpu = vc->processor;
     //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
 
@@ -288,16 +325,17 @@ mcc_tick(void *_vc) {
     if (is_idle_domain(vc->domain))
         return;
 
-    
 
 
 
-    printk("[%i.%i] pri=%i flags=%x cpu=%i",
+
+    printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:lu \n",
            svc->vcpu->domain->domain_id,
            svc->vcpu->vcpu_id,
            svc->pri,
            svc->flags,
-           svc->vcpu->processor);
+           svc->vcpu->processor,
+    svc->mcc_cpu_consumption);
 
 
     if (mcc_domid == 0)
@@ -387,39 +425,9 @@ mcc_tick(void *_vc) {
         if(vcpu_runnable(vc))
             __runq_insert(svc);
     set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    __mcc_runq_tickle(svc);// fixme. it was before set-timer in the first version
+    __runq_tickle(svc);// fixme. it was before set-timer in the first version
 }
 
-
-static inline void
-__runq_insert(struct csched_vcpu *svc)
-{
-    const struct list_head * const runq = RUNQ(svc->vcpu->processor);
-    struct list_head *iter;
-
-    BUG_ON( __vcpu_on_runq(svc) );
-
-    list_for_each( iter, runq )
-    {
-        const struct csched_vcpu * const iter_svc = __runq_elem(iter);
-        if ( svc->pri > iter_svc->pri )
-            break;
-    }
-
-    /* If the vcpu yielded, try to put it behind one lower-priority
-     * runnable vcpu if we can.  The next runq_sort will bring it forward
-     * within 30ms if the queue too long. */
-    if ( test_bit(CSCHED_FLAG_VCPU_YIELD, &svc->flags)
-         && __runq_elem(iter)->pri > CSCHED_PRI_IDLE )
-    {
-        iter=iter->next;
-
-        /* Some sanity checks */
-        BUG_ON(iter == runq);
-    }
-
-    list_add_tail(&svc->runq_elem, iter);
-}
 
 static inline void
 __runq_remove(struct csched_vcpu *svc)
@@ -494,6 +502,10 @@ static void burn_credits(struct csched_vcpu *svc, s_time_t now)
     credits = val;
     ASSERT(credits == val); /* make sure we haven't truncated val */
     atomic_sub(credits, &svc->credit);
+
+    //mcc
+    svc->mcc_cpu_consumption += delta;
+
     svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
 }
 
