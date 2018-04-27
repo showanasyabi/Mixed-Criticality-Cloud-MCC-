@@ -1321,7 +1321,7 @@ static  unsigned int pcpu_is_hot(int cpu)
     list_for_each( iter, runq )
     {
         iter_svc = __runq_elem(iter);
-        if ( (iter_svc->pri == CSCHED_PRI_TS_UNDER)  & (iter_svc->mcc_crit_level == 2))
+        if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->mcc_crit_level == 2))
         {
             if (iter_svc->mcc_temperature > 0)
                 return   1;
@@ -1358,7 +1358,7 @@ mcc_earliest_deadline_vcpu(int cpu)
         {
             struct csched_vcpu *  iter_svc = __runq_elem(iter);
 
-            if (snext == NULL && iter_svc->mcc_crit_level == 2)
+            if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri>= CSCHED_PRI_TS_UNDER)
             {
 
 
@@ -1390,11 +1390,21 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
     if(snext->pri == CSCHED_PRI_IDLE)
         return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
 
+
+
+    snext =NULL;
+
     list_for_each( iter, runq )
     {
+
         struct csched_vcpu *  iter_svc = __runq_elem(iter);
+        if (snext == NULL && iter_svc->pri>= CSCHED_PRI_TS_UNDER)
+        {
 
 
+            snext= iter_svc;
+            continue;
+        }
         if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
 
 
@@ -1417,7 +1427,7 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
 
 
 
-long H=0;
+long H=3;
 static struct task_slice
 csched_schedule(
         const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
@@ -1567,7 +1577,15 @@ else
             //__runq_remove(snext);
             tslice =MICROSECS (snext->mcc_wcet_2) - snext->mcc_cpu_consumption;
         }
-        //else
+        else // it could not find an active and high crit vcPU
+        {
+            snext = __runq_elem(runq->next);
+
+            tslice = MILLISECS(3);// fixme
+
+        }
+
+
        // {
             //if (spc->mcs_hot == 0   )
 
@@ -1582,10 +1600,15 @@ else
         snext = mcc_earliest__virtual_deadline_vcpu(cpu);
         // __runq_remove(snext);
 
-        if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
-            tslice = MILLISECS(3); // fixme
-        else
+        if (snext != NULL ) {
             tslice = MICROSECS(snext->mcc_wcet_1) - snext->mcc_cpu_consumption;
+
+        }
+        else {
+            snext = __runq_elem(runq->next);
+
+            tslice = MILLISECS(3);// fixme}
+        }
 
     }
 
