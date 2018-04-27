@@ -207,7 +207,7 @@ struct csched_vcpu {
     s_time_t mcc_elapsed_time;
     unsigned int mcc_is_resident;
     s_time_t mcc_cpu_consumption;
-    long mcc_temperature;
+    int mcc_temperature;
 
 #ifdef CSCHED_STATS
     struct {
@@ -381,7 +381,7 @@ mcc_tick(void *_vc) {
 
        // svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
 
-        vc->mcc_v_deadline = NOW() + MICROSECS(4);
+        svc->mcc_v_deadline = NOW() + MICROSECS(4);
         svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
         svc->mcc_cpu_consumption = 0;
 
@@ -1358,7 +1358,11 @@ mcc_earliest_deadline_vcpu(int cpu)
         {
             struct csched_vcpu *  iter_svc = __runq_elem(iter);
 
-            if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri>= CSCHED_PRI_TS_UNDER)
+            if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
+                continue;
+
+
+            if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
             {
 
 
@@ -1392,13 +1396,17 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
 
 
 
-    snext =NULL;
+    snext = NULL;
 
     list_for_each( iter, runq )
     {
 
         struct csched_vcpu *  iter_svc = __runq_elem(iter);
-        if (snext == NULL && iter_svc->pri>= CSCHED_PRI_TS_UNDER)
+
+        if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
+            continue;
+
+        if (snext == NULL && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
         {
 
 
@@ -1724,6 +1732,7 @@ csched_dump_pcpu(const struct scheduler *ops, int cpu)
 
     spc = CSCHED_PCPU(cpu);
     runq = &spc->runq;
+
 
     cpumask_scnprintf(cpustr, sizeof(cpustr), per_cpu(cpu_sibling_mask, cpu));
     printk(" sort=%d, sibling=%s, ", spc->runq_sort_last, cpustr);
