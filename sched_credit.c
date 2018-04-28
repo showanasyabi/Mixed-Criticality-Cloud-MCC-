@@ -170,16 +170,6 @@ struct csched_pcpu {
     struct timer ticker;
     unsigned int tick;
     unsigned int idle_bias;
-
-
-    unsigned mcc_cpu_mode; // criticality mode
-    unsigned  int mcc_u_1_1;// U1(1)
-    unsigned int mcc_u_2_1; // U2(1)
-    unsigned int mcc_u_2_2; // U2(2)
-
-
-
-
 };
 
 /*
@@ -195,20 +185,6 @@ struct csched_vcpu {
     s_time_t start_time;   /* When we were scheduled (used for credit) */
     unsigned flags;
     int16_t pri;
-
-    //MCC
-    s_time_t mcc_deadline;
-    s_time_t mcc_v_deadline; // virtual deadline
-    unsigned int mcc_wcet_1;
-    unsigned int mcc_wcet_2;
-    unsigned int mcc_period;
-    unsigned mcc_crit_level;
-    struct timer mcc_ticker;
-    s_time_t mcc_elapsed_time;
-    unsigned int mcc_is_resident;
-    s_time_t mcc_cpu_consumption;
-    int mcc_temperature;
-
 #ifdef CSCHED_STATS
     struct {
         int credit_last;
@@ -257,8 +233,7 @@ struct csched_private {
 };
 
 static void csched_tick(void *_cpu);
-static inline void __runq_tickle(struct csched_vcpu *new);
-
+static void csched_acct(void *dummy);
 
 static inline int
 __vcpu_on_runq(struct csched_vcpu *svc)
@@ -283,11 +258,6 @@ static inline bool_t is_runq_idle(unsigned int cpu)
     return list_empty(RUNQ(cpu)) ||
            is_idle_vcpu(__runq_elem(RUNQ(cpu)->next)->vcpu);
 }
-
-
-
-
-
 
 static inline void
 __runq_insert(struct csched_vcpu *svc)
@@ -318,139 +288,6 @@ __runq_insert(struct csched_vcpu *svc)
 
     list_add_tail(&svc->runq_elem, iter);
 }
-
-
-
-static void
-mcc_tick(void *_vc) {
-    struct vcpu *vc = (struct vcpu *) _vc;
-    struct csched_vcpu *svc = CSCHED_VCPU(vc);
-    //struct csched_dom *sdom;
-    //unsigned int cpu = vc->processor;
-    //  struct csched_pcpu *spc = CSCHED_PCPU(cpu);
-
-    int mcc_domid = svc->vcpu->domain->domain_id;
-
-
-
-    if (is_idle_domain(vc->domain))
-        return;
-
-
-
-    if(svc->mcc_crit_level == 2 && svc->mcc_temperature > 0 && (svc->mcc_cpu_consumption  <= MICROSECS(svc->mcc_wcet_1)))
-        svc->mcc_temperature--;
-
-
-        printk("[%i.%i] pri=%i flags=%x cpu=%i, cpu consumption:%lu, temperature:%i \n",
-           svc->vcpu->domain->domain_id,
-           svc->vcpu->vcpu_id,
-           svc->pri,
-           svc->flags,
-           svc->vcpu->processor,
-    svc->mcc_cpu_consumption,
-        svc->mcc_temperature);
-
-
-    if (mcc_domid == 0)
-    {
-
-        svc->mcc_wcet_1 = 30000;
-        svc->mcc_wcet_2 = 50000;
-        svc->mcc_period = 100000;
-        svc->mcc_crit_level = 1;
-        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
-        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-        svc->mcc_cpu_consumption = 0;
-
-    }
-
-
-
-    if (mcc_domid == 1)
-    {
-
-
-        svc->mcc_wcet_1 = 1000;
-        svc->mcc_wcet_2 = 25000;
-        svc->mcc_period = 100000;
-        svc->mcc_crit_level = 2;
-        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-       // svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-        svc->mcc_v_deadline = NOW() + MICROSECS(4);
-        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-        svc->mcc_cpu_consumption = 0;
-
-    }
-
-    if (mcc_domid == 2)
-    {
-
-
-        svc->mcc_wcet_1 = 25000;
-        svc->mcc_wcet_2 = 25000;
-        svc->mcc_period = 100000;
-        svc->mcc_crit_level = 1;
-        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
-        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-        svc->mcc_cpu_consumption = 0;
-
-    }
-
-
-    if (mcc_domid == 3)
-    {
-
-
-        svc->mcc_wcet_1 = 25000;
-        svc->mcc_wcet_2 = 25000;
-        svc->mcc_period = 100000;
-        svc->mcc_crit_level = 1;
-        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
-        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-        svc->mcc_cpu_consumption = 0;
-
-    }
-
-
-
-    if (mcc_domid == 4)
-    {
-
-
-        svc->mcc_wcet_1 = 25000;
-        svc->mcc_wcet_2 = 25000;
-        svc->mcc_period = 100000;
-        svc->mcc_crit_level = 1;
-        svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period);
-
-        svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period);
-        svc->pri = CSCHED_PRI_TS_UNDER; // activate the vCPU
-        svc->mcc_cpu_consumption = 0;
-
-    }
-
-
-
-
-
-
-
-    if ( !__vcpu_on_runq(svc)  && !vc->is_running )// fixme-> should we check if  vcpu_runnable(vc) -- mybe it is not runnable now but it becomes runnable few microseconds later
-        if(vcpu_runnable(vc))
-            __runq_insert(svc);
-    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period) );
-    __runq_tickle(svc);// fixme. it was before set-timer in the first version
-}
-
 
 static inline void
 __runq_remove(struct csched_vcpu *svc)
@@ -492,7 +329,6 @@ static inline int __vcpu_has_soft_affinity(const struct vcpu *vc,
  * filtered out from the result, to avoid running a vcpu where it would
  * like, but is not allowed to!
  */
-/*
 static void
 csched_balance_cpumask(const struct vcpu *vc, int step, cpumask_t *mask)
 {
@@ -503,10 +339,9 @@ csched_balance_cpumask(const struct vcpu *vc, int step, cpumask_t *mask)
         if ( unlikely(cpumask_empty(mask)) )
             cpumask_copy(mask, vc->cpu_hard_affinity);
     }
-    else // step == CSCHED_BALANCE_HARD_AFFINITY
+    else /* step == CSCHED_BALANCE_HARD_AFFINITY */
         cpumask_copy(mask, vc->cpu_hard_affinity);
 }
- */
 
 static void burn_credits(struct csched_vcpu *svc, s_time_t now)
 {
@@ -525,10 +360,6 @@ static void burn_credits(struct csched_vcpu *svc, s_time_t now)
     credits = val;
     ASSERT(credits == val); /* make sure we haven't truncated val */
     atomic_sub(credits, &svc->credit);
-
-    //mcc
-    svc->mcc_cpu_consumption += delta;
-
     svc->start_time += (credits * MILLISECS(1)) / CSCHED_CREDITS_PER_MSEC;
 }
 
@@ -540,11 +371,126 @@ DEFINE_PER_CPU(unsigned int, last_tickle_cpu);
 static inline void __runq_tickle(struct csched_vcpu *new)
 {
     unsigned int cpu = new->vcpu->processor;
-    cpumask_t mask;
-    cpumask_clear(&mask);
-    __cpumask_set_cpu(cpu, &mask);
-    cpumask_raise_softirq(&mask, SCHEDULE_SOFTIRQ);
+    struct csched_vcpu * const cur = CSCHED_VCPU(curr_on_cpu(cpu));
+    struct csched_private *prv = CSCHED_PRIV(per_cpu(scheduler, cpu));
+    cpumask_t mask, idle_mask, *online;
+    int balance_step, idlers_empty;
 
+    ASSERT(cur);
+    cpumask_clear(&mask);
+
+    online = cpupool_domain_cpumask(new->sdom->dom);
+    cpumask_and(&idle_mask, prv->idlers, online);
+    idlers_empty = cpumask_empty(&idle_mask);
+
+    /*
+     * If the pcpu is idle, or there are no idlers and the new
+     * vcpu is a higher priority than the old vcpu, run it here.
+     *
+     * If there are idle cpus, first try to find one suitable to run
+     * new, so we can avoid preempting cur.  If we cannot find a
+     * suitable idler on which to run new, run it here, but try to
+     * find a suitable idler on which to run cur instead.
+     */
+    if ( cur->pri == CSCHED_PRI_IDLE
+         || (idlers_empty && new->pri > cur->pri) )
+    {
+        if ( cur->pri != CSCHED_PRI_IDLE )
+            SCHED_STAT_CRANK(tickle_idlers_none);
+        __cpumask_set_cpu(cpu, &mask);
+    }
+    else if ( !idlers_empty )
+    {
+        /*
+         * Soft and hard affinity balancing loop. For vcpus without
+         * a useful soft affinity, consider hard affinity only.
+         */
+        for_each_csched_balance_step( balance_step )
+        {
+            int new_idlers_empty;
+
+            if ( balance_step == CSCHED_BALANCE_SOFT_AFFINITY
+                 && !__vcpu_has_soft_affinity(new->vcpu,
+                                              new->vcpu->cpu_hard_affinity) )
+                continue;
+
+            /* Are there idlers suitable for new (for this balance step)? */
+            csched_balance_cpumask(new->vcpu, balance_step,
+                                   cpumask_scratch_cpu(cpu));
+            cpumask_and(cpumask_scratch_cpu(cpu),
+                        cpumask_scratch_cpu(cpu), &idle_mask);
+            new_idlers_empty = cpumask_empty(cpumask_scratch_cpu(cpu));
+
+            /*
+             * Let's not be too harsh! If there aren't idlers suitable
+             * for new in its soft affinity mask, make sure we check its
+             * hard affinity as well, before taking final decisions.
+             */
+            if ( new_idlers_empty
+                 && balance_step == CSCHED_BALANCE_SOFT_AFFINITY )
+                continue;
+
+            /*
+             * If there are no suitable idlers for new, and it's higher
+             * priority than cur, check whether we can migrate cur away.
+             * (We have to do it indirectly, via _VPF_migrating, instead
+             * of just tickling any idler suitable for cur) because cur
+             * is running.)
+             *
+             * If there are suitable idlers for new, no matter priorities,
+             * leave cur alone (as it is running and is, likely, cache-hot)
+             * and wake some of them (which is waking up and so is, likely,
+             * cache cold anyway).
+             */
+            if ( new_idlers_empty && new->pri > cur->pri )
+            {
+                csched_balance_cpumask(cur->vcpu, balance_step,
+                                       cpumask_scratch_cpu(cpu));
+                if ( cpumask_intersects(cpumask_scratch_cpu(cpu),
+                                        &idle_mask) )
+                {
+                    SCHED_VCPU_STAT_CRANK(cur, kicked_away);
+                    SCHED_VCPU_STAT_CRANK(cur, migrate_r);
+                    SCHED_STAT_CRANK(migrate_kicked_away);
+                    set_bit(_VPF_migrating, &cur->vcpu->pause_flags);
+                }
+                /* Tickle cpu anyway, to let new preempt cur. */
+                SCHED_STAT_CRANK(tickle_idlers_none);
+                __cpumask_set_cpu(cpu, &mask);
+            }
+            else if ( !new_idlers_empty )
+            {
+                /* Which of the idlers suitable for new shall we wake up? */
+                SCHED_STAT_CRANK(tickle_idlers_some);
+                if ( opt_tickle_one_idle )
+                {
+                    this_cpu(last_tickle_cpu) =
+                            cpumask_cycle(this_cpu(last_tickle_cpu),
+                                          cpumask_scratch_cpu(cpu));
+                    __cpumask_set_cpu(this_cpu(last_tickle_cpu), &mask);
+                }
+                else
+                    cpumask_or(&mask, &mask, cpumask_scratch_cpu(cpu));
+            }
+
+            /* Did we find anyone? */
+            if ( !cpumask_empty(&mask) )
+                break;
+        }
+    }
+
+    if ( !cpumask_empty(&mask) )
+    {
+        if ( unlikely(tb_init_done) )
+        {
+            /* Avoid TRACE_*: saves checking !tb_init_done each step */
+            for_each_cpu(cpu, &mask)
+            __trace_var(TRC_CSCHED_TICKLE, 1, sizeof(cpu), &cpu);
+        }
+
+        /* Send scheduler interrupts to designated CPUs */
+        cpumask_raise_softirq(&mask, SCHEDULE_SOFTIRQ);
+    }
 }
 
 static void
@@ -626,8 +572,9 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     if ( prv->ncpus == 1 )
     {
         prv->master = cpu;
-      //  init_timer(&prv->master_ticker, csched_acct, prv, cpu);
-       // set_timer(&prv->master_ticker, NOW() + MILLISECS(prv->tslice_ms));
+        init_timer(&prv->master_ticker, csched_acct, prv, cpu);
+        set_timer(&prv->master_ticker,
+                  NOW() + MILLISECS(prv->tslice_ms));
     }
 
     init_timer(&spc->ticker, csched_tick, (void *)(unsigned long)cpu, cpu);
@@ -636,14 +583,6 @@ init_pdata(struct csched_private *prv, struct csched_pcpu *spc, int cpu)
     INIT_LIST_HEAD(&spc->runq);
     spc->runq_sort_last = prv->runq_sort;
     spc->idle_bias = nr_cpu_ids - 1;
-
-
-
-
-    spc->mcc_cpu_mode = 1;
-    spc->mcc_u_1_1 = 0;
-    spc->mcc_u_2_1= 0;
-    spc->mcc_u_2_2=0;
 
     /* Start off idling... */
     BUG_ON(!is_idle_vcpu(curr_on_cpu(cpu)));
@@ -778,32 +717,147 @@ __csched_vcpu_is_migrateable(struct vcpu *vc, int dest_cpu, cpumask_t *mask)
 static int
 _csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
 {
-    unsigned  mcc_dom_id = vc->domain->domain_id;
-    if(mcc_dom_id == 0 ) {
+    cpumask_t cpus;
+    cpumask_t idlers;
+    cpumask_t *online;
+    struct csched_pcpu *spc = NULL;
+    int cpu = vc->processor;
+    int balance_step;
 
-        if(vc->vcpu_id == 0 )
-            return 0;
-        if(vc->vcpu_id == 1)
-            return 1;
-        if(vc->vcpu_id == 2)
-            return 2;
+    /* Store in cpus the mask of online cpus on which the domain can run */
+    online = cpupool_domain_cpumask(vc->domain);
+    cpumask_and(&cpus, vc->cpu_hard_affinity, online);
 
-        if(vc->vcpu_id == 3)
-            return 3;
+    for_each_csched_balance_step( balance_step )
+    {
+        /*
+         * We want to pick up a pcpu among the ones that are online and
+         * can accommodate vc, which is basically what we computed above
+         * and stored in cpus. As far as hard affinity is concerned,
+         * there always will be at least one of these pcpus, hence cpus
+         * is never empty and the calls to cpumask_cycle() and
+         * cpumask_test_cpu() below are ok.
+         *
+         * On the other hand, when considering soft affinity too, it
+         * is possible for the mask to become empty (for instance, if the
+         * domain has been put in a cpupool that does not contain any of the
+         * pcpus in its soft affinity), which would result in the ASSERT()-s
+         * inside cpumask_*() operations triggering (in debug builds).
+         *
+         * Therefore, in this case, we filter the soft affinity mask against
+         * cpus and, if the result is empty, we just skip the soft affinity
+         * balancing step all together.
+         */
+        if ( balance_step == CSCHED_BALANCE_SOFT_AFFINITY
+             && !__vcpu_has_soft_affinity(vc, &cpus) )
+            continue;
 
+        /* Pick an online CPU from the proper affinity mask */
+        csched_balance_cpumask(vc, balance_step, &cpus);
+        cpumask_and(&cpus, &cpus, online);
+
+        /* If present, prefer vc's current processor */
+        cpu = cpumask_test_cpu(vc->processor, &cpus)
+              ? vc->processor
+              : cpumask_cycle(vc->processor, &cpus);
+        ASSERT(cpumask_test_cpu(cpu, &cpus));
+
+        /*
+         * Try to find an idle processor within the above constraints.
+         *
+         * In multi-core and multi-threaded CPUs, not all idle execution
+         * vehicles are equal!
+         *
+         * We give preference to the idle execution vehicle with the most
+         * idling neighbours in its grouping. This distributes work across
+         * distinct cores first and guarantees we don't do something stupid
+         * like run two VCPUs on co-hyperthreads while there are idle cores
+         * or sockets.
+         *
+         * Notice that, when computing the "idleness" of cpu, we may want to
+         * discount vc. That is, iff vc is the currently running and the only
+         * runnable vcpu on cpu, we add cpu to the idlers.
+         */
+        cpumask_and(&idlers, &cpu_online_map, CSCHED_PRIV(ops)->idlers);
+        if ( vc->processor == cpu && is_runq_idle(cpu) )
+            __cpumask_set_cpu(cpu, &idlers);
+        cpumask_and(&cpus, &cpus, &idlers);
+
+        /*
+         * It is important that cpu points to an idle processor, if a suitable
+         * one exists (and we can use cpus to check and, possibly, choose a new
+         * CPU, as we just &&-ed it with idlers). In fact, if we are on SMT, and
+         * cpu points to a busy thread with an idle sibling, both the threads
+         * will be considered the same, from the "idleness" calculation point
+         * of view", preventing vcpu from being moved to the thread that is
+         * actually idle.
+         *
+         * Notice that cpumask_test_cpu() is quicker than cpumask_empty(), so
+         * we check for it first.
+         */
+        if ( !cpumask_test_cpu(cpu, &cpus) && !cpumask_empty(&cpus) )
+            cpu = cpumask_cycle(cpu, &cpus);
+        __cpumask_clear_cpu(cpu, &cpus);
+
+        while ( !cpumask_empty(&cpus) )
+        {
+            cpumask_t cpu_idlers;
+            cpumask_t nxt_idlers;
+            int nxt, weight_cpu, weight_nxt;
+            int migrate_factor;
+
+            nxt = cpumask_cycle(cpu, &cpus);
+
+            if ( cpumask_test_cpu(cpu, per_cpu(cpu_core_mask, nxt)) )
+            {
+                /* We're on the same socket, so check the busy-ness of threads.
+                 * Migrate if # of idlers is less at all */
+                ASSERT( cpumask_test_cpu(nxt, per_cpu(cpu_core_mask, cpu)) );
+                migrate_factor = 1;
+                cpumask_and(&cpu_idlers, &idlers, per_cpu(cpu_sibling_mask,
+                                                          cpu));
+                cpumask_and(&nxt_idlers, &idlers, per_cpu(cpu_sibling_mask,
+                                                          nxt));
+            }
+            else
+            {
+                /* We're on different sockets, so check the busy-ness of cores.
+                 * Migrate only if the other core is twice as idle */
+                ASSERT( !cpumask_test_cpu(nxt, per_cpu(cpu_core_mask, cpu)) );
+                migrate_factor = 2;
+                cpumask_and(&cpu_idlers, &idlers, per_cpu(cpu_core_mask, cpu));
+                cpumask_and(&nxt_idlers, &idlers, per_cpu(cpu_core_mask, nxt));
+            }
+
+            weight_cpu = cpumask_weight(&cpu_idlers);
+            weight_nxt = cpumask_weight(&nxt_idlers);
+            /* smt_power_savings: consolidate work rather than spreading it */
+            if ( sched_smt_power_savings ?
+                 weight_cpu > weight_nxt :
+                 weight_cpu * migrate_factor < weight_nxt )
+            {
+                cpumask_and(&nxt_idlers, &cpus, &nxt_idlers);
+                spc = CSCHED_PCPU(nxt);
+                cpu = cpumask_cycle(spc->idle_bias, &nxt_idlers);
+                cpumask_andnot(&cpus, &cpus, per_cpu(cpu_sibling_mask, cpu));
+            }
+            else
+            {
+                cpumask_andnot(&cpus, &cpus, &nxt_idlers);
+            }
+        }
+
+        /* Stop if cpu is idle */
+        if ( cpumask_test_cpu(cpu, &idlers) )
+            break;
     }
-    if(mcc_dom_id == 1 )
-        return 5;
-    if(mcc_dom_id == 2 )
-        return 5;
-    if(mcc_dom_id == 3 )
-        return 5;
-    if(mcc_dom_id == 4 )
-        return 5;
 
-    return vc->processor;
+    if ( commit && spc )
+        spc->idle_bias = cpu;
 
+    TRACE_3D(TRC_CSCHED_PICKED_CPU, vc->domain->domain_id, vc->vcpu_id, cpu);
 
+    return cpu;
 }
 
 static int
@@ -951,27 +1005,12 @@ csched_alloc_vdata(const struct scheduler *ops, struct vcpu *vc, void *dd)
     svc->vcpu = vc;
     svc->pri = is_idle_domain(vc->domain) ?
                CSCHED_PRI_IDLE : CSCHED_PRI_TS_UNDER;
+
+
+    init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
+    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
+
     SCHED_VCPU_STATS_RESET(svc);
-
-
-    svc->mcc_period = 50000; // fixme
-    svc->mcc_wcet_1 =  10000;
-    svc->mcc_wcet_2 =   20000;
-    svc->mcc_crit_level =1;
-    svc->mcc_deadline = NOW() + MICROSECS(svc->mcc_period); //fixme
-    svc->mcc_v_deadline = NOW() + MICROSECS(svc->mcc_period); // fixme
-    svc->mcc_is_resident = 0;
-    svc->mcc_cpu_consumption= 0;
-    svc->mcc_temperature =0 ;
-
-
-    if ( !is_idle_domain(vc->domain)) {
-        init_timer(&svc->mcc_ticker, mcc_tick, (void *) (struct vcpu *) vc, vc->processor);
-        set_timer(&svc->mcc_ticker, NOW() + MICROSECS(svc->mcc_period));
-    }
-
-
-
     SCHED_STAT_CRANK(vcpu_alloc);
     return svc;
 }
@@ -1000,6 +1039,25 @@ csched_vcpu_insert(const struct scheduler *ops, struct vcpu *vc)
 
     SCHED_STAT_CRANK(vcpu_insert);
 }
+
+
+
+static void
+mcc_tick(void *_vc) {
+    struct vcpu *vc = (struct vcpu *) _vc;
+    struct csched_vcpu *svc = CSCHED_VCPU(vc);
+    long period =  100000;
+
+
+
+    set_timer(&svc->mcc_ticker, NOW() + MICROSECS(period) );
+    __runq_tickle(svc);// fixme. it was before set-timer in the first version
+}
+
+
+
+
+
 
 static void
 csched_free_vdata(const struct scheduler *ops, void *priv)
@@ -1270,7 +1328,256 @@ csched_dom_destroy(const struct scheduler *ops, struct domain *dom)
  * through the runq and move up any UNDERs that are preceded by OVERS. We
  * remember the last UNDER to make the move up operation O(1).
  */
+static void
+csched_runq_sort(struct csched_private *prv, unsigned int cpu)
+{
+    struct csched_pcpu * const spc = CSCHED_PCPU(cpu);
+    struct list_head *runq, *elem, *next, *last_under;
+    struct csched_vcpu *svc_elem;
+    spinlock_t *lock;
+    unsigned long flags;
+    int sort_epoch;
 
+    sort_epoch = prv->runq_sort;
+    if ( sort_epoch == spc->runq_sort_last )
+        return;
+
+    spc->runq_sort_last = sort_epoch;
+
+    lock = pcpu_schedule_lock_irqsave(cpu, &flags);
+
+    runq = &spc->runq;
+    elem = runq->next;
+    last_under = runq;
+
+    while ( elem != runq )
+    {
+        next = elem->next;
+        svc_elem = __runq_elem(elem);
+
+        if ( svc_elem->pri >= CSCHED_PRI_TS_UNDER )
+        {
+            /* does elem need to move up the runq? */
+            if ( elem->prev != last_under )
+            {
+                list_del(elem);
+                list_add(elem, last_under);
+            }
+            last_under = elem;
+        }
+
+        elem = next;
+    }
+
+    pcpu_schedule_unlock_irqrestore(lock, flags, cpu);
+}
+
+static void
+csched_acct(void* dummy)
+{
+    struct csched_private *prv = dummy;
+    unsigned long flags;
+    struct list_head *iter_vcpu, *next_vcpu;
+    struct list_head *iter_sdom, *next_sdom;
+    struct csched_vcpu *svc;
+    struct csched_dom *sdom;
+    uint32_t credit_total;
+    uint32_t weight_total;
+    uint32_t weight_left;
+    uint32_t credit_fair;
+    uint32_t credit_peak;
+    uint32_t credit_cap;
+    int credit_balance;
+    int credit_xtra;
+    int credit;
+
+
+    spin_lock_irqsave(&prv->lock, flags);
+
+    weight_total = prv->weight;
+    credit_total = prv->credit;
+
+    /* Converge balance towards 0 when it drops negative */
+    if ( prv->credit_balance < 0 )
+    {
+        credit_total -= prv->credit_balance;
+        SCHED_STAT_CRANK(acct_balance);
+    }
+
+    if ( unlikely(weight_total == 0) )
+    {
+        prv->credit_balance = 0;
+        spin_unlock_irqrestore(&prv->lock, flags);
+        SCHED_STAT_CRANK(acct_no_work);
+        goto out;
+    }
+
+    SCHED_STAT_CRANK(acct_run);
+
+    weight_left = weight_total;
+    credit_balance = 0;
+    credit_xtra = 0;
+    credit_cap = 0U;
+
+    list_for_each_safe( iter_sdom, next_sdom, &prv->active_sdom )
+    {
+        sdom = list_entry(iter_sdom, struct csched_dom, active_sdom_elem);
+
+        BUG_ON( is_idle_domain(sdom->dom) );
+        BUG_ON( sdom->active_vcpu_count == 0 );
+        BUG_ON( sdom->weight == 0 );
+        BUG_ON( (sdom->weight * sdom->active_vcpu_count) > weight_left );
+
+        weight_left -= ( sdom->weight * sdom->active_vcpu_count );
+
+        /*
+         * A domain's fair share is computed using its weight in competition
+         * with that of all other active domains.
+         *
+         * At most, a domain can use credits to run all its active VCPUs
+         * for one full accounting period. We allow a domain to earn more
+         * only when the system-wide credit balance is negative.
+         */
+        credit_peak = sdom->active_vcpu_count * prv->credits_per_tslice;
+        if ( prv->credit_balance < 0 )
+        {
+            credit_peak += ( ( -prv->credit_balance
+                               * sdom->weight
+                               * sdom->active_vcpu_count) +
+                             (weight_total - 1)
+                           ) / weight_total;
+        }
+
+        if ( sdom->cap != 0U )
+        {
+            credit_cap = ((sdom->cap * prv->credits_per_tslice) + 99) / 100;
+            if ( credit_cap < credit_peak )
+                credit_peak = credit_cap;
+
+            /* FIXME -- set cap per-vcpu as well...? */
+            credit_cap = ( credit_cap + ( sdom->active_vcpu_count - 1 )
+                         ) / sdom->active_vcpu_count;
+        }
+
+        credit_fair = ( ( credit_total
+                          * sdom->weight
+                          * sdom->active_vcpu_count )
+                        + (weight_total - 1)
+                      ) / weight_total;
+
+        if ( credit_fair < credit_peak )
+        {
+            credit_xtra = 1;
+        }
+        else
+        {
+            if ( weight_left != 0U )
+            {
+                /* Give other domains a chance at unused credits */
+                credit_total += ( ( ( credit_fair - credit_peak
+                                    ) * weight_total
+                                  ) + ( weight_left - 1 )
+                                ) / weight_left;
+            }
+
+            if ( credit_xtra )
+            {
+                /*
+                 * Lazily keep domains with extra credits at the head of
+                 * the queue to give others a chance at them in future
+                 * accounting periods.
+                 */
+                SCHED_STAT_CRANK(acct_reorder);
+                list_del(&sdom->active_sdom_elem);
+                list_add(&sdom->active_sdom_elem, &prv->active_sdom);
+            }
+
+            credit_fair = credit_peak;
+        }
+
+        /* Compute fair share per VCPU */
+        credit_fair = ( credit_fair + ( sdom->active_vcpu_count - 1 )
+                      ) / sdom->active_vcpu_count;
+
+
+        list_for_each_safe( iter_vcpu, next_vcpu, &sdom->active_vcpu )
+        {
+            svc = list_entry(iter_vcpu, struct csched_vcpu, active_vcpu_elem);
+            BUG_ON( sdom != svc->sdom );
+
+            /* Increment credit */
+            atomic_add(credit_fair, &svc->credit);
+            credit = atomic_read(&svc->credit);
+
+            /*
+             * Recompute priority or, if VCPU is idling, remove it from
+             * the active list.
+             */
+            if ( credit < 0 )
+            {
+                svc->pri = CSCHED_PRI_TS_OVER;
+
+                /* Park running VCPUs of capped-out domains */
+                if ( sdom->cap != 0U &&
+                     credit < -credit_cap &&
+                     !test_and_set_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
+                {
+                    SCHED_STAT_CRANK(vcpu_park);
+                    vcpu_pause_nosync(svc->vcpu);
+                }
+
+                /* Lower bound on credits */
+                if ( credit < -prv->credits_per_tslice )
+                {
+                    SCHED_STAT_CRANK(acct_min_credit);
+                    credit = -prv->credits_per_tslice;
+                    atomic_set(&svc->credit, credit);
+                }
+            }
+            else
+            {
+                svc->pri = CSCHED_PRI_TS_UNDER;
+
+                /* Unpark any capped domains whose credits go positive */
+                if ( test_and_clear_bit(CSCHED_FLAG_VCPU_PARKED, &svc->flags) )
+                {
+                    /*
+                     * It's important to unset the flag AFTER the unpause()
+                     * call to make sure the VCPU's priority is not boosted
+                     * if it is woken up here.
+                     */
+                    SCHED_STAT_CRANK(vcpu_unpark);
+                    vcpu_unpause(svc->vcpu);
+                }
+
+                /* Upper bound on credits means VCPU stops earning */
+                if ( credit > prv->credits_per_tslice )
+                {
+                    __csched_vcpu_acct_stop_locked(prv, svc);
+                    /* Divide credits in half, so that when it starts
+                     * accounting again, it starts a little bit "ahead" */
+                    credit /= 2;
+                    atomic_set(&svc->credit, credit);
+                }
+            }
+
+            SCHED_VCPU_STAT_SET(svc, credit_last, credit);
+            SCHED_VCPU_STAT_SET(svc, credit_incr, credit_fair);
+            credit_balance += credit;
+        }
+    }
+
+    prv->credit_balance = credit_balance;
+
+    spin_unlock_irqrestore(&prv->lock, flags);
+
+    /* Inform each CPU that its runq needs to be sorted */
+    prv->runq_sort++;
+
+    out:
+    set_timer( &prv->master_ticker,
+               NOW() + MILLISECS(prv->tslice_ms));
+}
 
 static void
 csched_tick(void *_cpu)
@@ -1294,148 +1601,16 @@ csched_tick(void *_cpu)
      * modified priorities. This is a special O(n) sort and runs at most
      * once per accounting period (currently 30 milliseconds).
      */
-    //csched_runq_sort(prv, cpu);
+    csched_runq_sort(prv, cpu);
 
     set_timer(&spc->ticker, NOW() + MICROSECS(prv->tick_period_us) );
 }
-
-
 
 
 /*
  * This function is in the critical path. It is designed to be simple and
  * fast for the common case.
  */
-
-
-
-
-static  unsigned int pcpu_is_hot(int cpu)
-{
-
-    const struct list_head * const runq = RUNQ(cpu);
-    struct list_head *iter;
-    struct csched_vcpu *  iter_svc = NULL;
-
-
-    list_for_each( iter, runq )
-    {
-        iter_svc = __runq_elem(iter);
-        if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->mcc_crit_level == 2))
-        {
-            if (iter_svc->mcc_temperature > 0)
-                return   1;
-
-        }
-
-    }
-
-
-
-
-    return 0;
-}
-
-
-
-
-
-static struct  csched_vcpu *
-mcc_earliest_deadline_vcpu(int cpu)
-{
-    struct list_head * const runq = RUNQ(cpu);
-    struct csched_vcpu *snext;
-    struct list_head *iter;
-    snext= __runq_elem(runq->next);
-    if(snext->pri == CSCHED_PRI_IDLE)
-        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
-
-    snext =NULL;
-
-
-
-        list_for_each( iter, runq )
-        {
-            struct csched_vcpu *  iter_svc = __runq_elem(iter);
-
-            if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
-                continue;
-
-
-            if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
-            {
-
-
-                snext= iter_svc;
-                continue;
-            }
-
-
-            if ( iter_svc->pri >= snext->pri && iter_svc->mcc_deadline < snext->mcc_deadline &&  iter_svc->mcc_crit_level == 2 )
-
-
-                snext = iter_svc;
-
-
-        }
-
-
-    return snext;
-}
-
-
-static struct  csched_vcpu *
-mcc_earliest__virtual_deadline_vcpu(int cpu)
-{
-    struct list_head * const runq = RUNQ(cpu);
-    struct csched_vcpu *snext;
-    struct list_head *iter;
-    snext= __runq_elem(runq->next);
-    if(snext->pri == CSCHED_PRI_IDLE)
-        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
-
-
-
-    snext = NULL;
-
-    list_for_each( iter, runq )
-    {
-
-        struct csched_vcpu *  iter_svc = __runq_elem(iter);
-
-        if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
-            continue;
-
-        if (snext == NULL && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
-        {
-
-
-            snext= iter_svc;
-            continue;
-        }
-        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
-
-
-            snext = iter_svc;
-
-
-    }
-
-
-    return snext;
-}
-
-
-
-
-
-
-
-
-
-
-
-long H=3;
 static struct task_slice
 csched_schedule(
         const struct scheduler *ops, s_time_t now, bool_t tasklet_work_scheduled)
@@ -1447,7 +1622,6 @@ csched_schedule(
     struct csched_vcpu *snext;
     struct task_slice ret;
     s_time_t runtime, tslice;
-    struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
 
     SCHED_STAT_CRANK(schedule);
     CSCHED_VCPU_CHECK(current);
@@ -1460,35 +1634,6 @@ csched_schedule(
     {
         /* Update credits of a non-idle VCPU. */
         burn_credits(scurr, now);
-
-        //MCS
-        if (scurr->mcc_crit_level == 2)
-        {
-            if (scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_2))
-            {
-                scurr->pri = CSCHED_PRI_TS_OVER;
-
-            }
-            //else
-            if ((scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_1)) &   (vcpu_runnable(current)) )
-                //else if ((scurr->MCS_elapsed_time >= MICROSECS(5)) &   (vcpu_runnable(current)) )
-            {
-
-                scurr-> mcc_temperature = H; // fixme
-
-            }
-
-
-
-        }
-        if (scurr->mcc_crit_level == 1)
-        {
-            if (scurr->mcc_cpu_consumption >= MICROSECS(scurr->mcc_wcet_1))
-                scurr->pri = CSCHED_PRI_TS_OVER;
-
-        }
-
-
         scurr->start_time -= now;
     }
     else
@@ -1511,8 +1656,6 @@ csched_schedule(
 
     /* If we have schedule rate limiting enabled, check to see
      * how long we've run for. */
-
-    /*
     if ( !tasklet_work_scheduled
          && prv->ratelimit_us
          && vcpu_runnable(current)
@@ -1522,20 +1665,19 @@ csched_schedule(
         snext = scurr;
         snext->start_time += now;
         perfc_incr(delay_ms);
-
-         // Next timeslice must last just until we'll have executed for
-         // ratelimit_us. However, to avoid setting a really short timer, which
-         // will most likely be inaccurate and counterproductive, we never go
-         // below CSCHED_MIN_TIMER.
-
+        /*
+         * Next timeslice must last just until we'll have executed for
+         * ratelimit_us. However, to avoid setting a really short timer, which
+         * will most likely be inaccurate and counterproductive, we never go
+         * below CSCHED_MIN_TIMER.
+         */
         tslice = MICROSECS(prv->ratelimit_us) - runtime;
         if ( unlikely(runtime < CSCHED_MIN_TIMER) )
             tslice = CSCHED_MIN_TIMER;
         ret.migrated = 0;
         goto out;
     }
-*/
-    //tslice = MILLISECS(prv->tslice_ms);
+    tslice = MILLISECS(prv->tslice_ms);
 
     /*
      * Select next runnable local VCPU (ie top of local runq)
@@ -1545,11 +1687,21 @@ csched_schedule(
     else
         BUG_ON( is_idle_vcpu(current) || list_empty(runq) );
 
-    // snext = __runq_elem(runq->next);
-    // ret.migrated = 0;
+    snext = __runq_elem(runq->next);
+    ret.migrated = 0;
 
     /* Tasklet work (which runs in idle VCPU context) overrides all else. */
+    if ( tasklet_work_scheduled )
+    {
+        TRACE_0D(TRC_CSCHED_SCHED_TASKLET);
+        snext = CSCHED_VCPU(idle_vcpu[cpu]);
+        snext->pri = CSCHED_PRI_TS_BOOST;
+    }
 
+    /*
+     * Clear YIELD flag before scheduling out
+     */
+    clear_bit(CSCHED_FLAG_VCPU_YIELD, &scurr->flags);
 
     /*
      * SMP Load balance:
@@ -1559,90 +1711,10 @@ csched_schedule(
      * urgent work... If not, csched_load_balance() will return snext, but
      * already removed from the runq.
      */
-    // if ( snext->pri > CSCHED_PRI_TS_OVER ) MCS
-
-    snext = __runq_elem(runq->next);
-    // snext = CSCHED_VCPU(idle_vcpu[cpu]);
-    ret.migrated = 0;
-
-    tslice = MILLISECS(3); // fixme
-
-    if (pcpu_is_hot(cpu))
-    {
-        spc->mcc_cpu_mode = 2;
-    }
-else
-        spc->mcc_cpu_mode = 1;
-
-
-
-
-    if (spc->mcc_cpu_mode == 2)
-    {
-        snext = mcc_earliest_deadline_vcpu(cpu);
-        if (snext != NULL )
-        {
-            //__runq_remove(snext);
-            tslice =MICROSECS (snext->mcc_wcet_2) - snext->mcc_cpu_consumption;
-        }
-        else // it could not find an active and high crit vcPU
-        {
-            snext = __runq_elem(runq->next);
-
-            tslice = MILLISECS(3);// fixme
-
-        }
-
-
-       // {
-            //if (spc->mcs_hot == 0   )
-
-           // spc->MCS_CPU_mode = MCS_LOW_CRI_MODE;
-       // }
-
-
-    }
-
-    if (spc->mcc_cpu_mode == 1)
-    {
-        snext = mcc_earliest__virtual_deadline_vcpu(cpu);
-        // __runq_remove(snext);
-
-        if (snext != NULL ) {
-            tslice = MICROSECS(snext->mcc_wcet_1) - snext->mcc_cpu_consumption;
-
-        }
-        else {
-            snext = __runq_elem(runq->next);
-
-            tslice = MILLISECS(3);// fixme}
-        }
-
-    }
-
-
-    if ( tasklet_work_scheduled )
-    {
-        TRACE_0D(TRC_CSCHED_SCHED_TASKLET);
-        snext = CSCHED_VCPU(idle_vcpu[cpu]);
-        snext->pri = CSCHED_PRI_TS_BOOST;
-        tslice = MILLISECS(prv->tslice_ms);
-    }
-
-    /*
-     * Clear YIELD flag before scheduling out
-     */
-    clear_bit(CSCHED_FLAG_VCPU_YIELD, &scurr->flags);
-
-
-    //if ( snext->pri >= CSCHED_PRI_TS_OVER )
-
-    if (snext== NULL)
-        snext = CSCHED_VCPU(idle_vcpu[cpu]);
-    __runq_remove(snext);
-
-    // else
-    // snext = csched_load_balance(prv, cpu, snext, &ret.migrated); MCS
+    //if ( snext->pri > CSCHED_PRI_TS_OVER )
+        __runq_remove(snext);
+    //else
+      //  snext = csched_load_balance(prv, cpu, snext, &ret.migrated);
 
     /*
      * Update idlers mask if necessary. When we're idling, other CPUs
@@ -1661,15 +1733,10 @@ else
     if ( !is_idle_vcpu(snext->vcpu) )
         snext->start_time += now;
 
-
-    // tslice = snext->MCS_WCET - snext->MCS_elapsed_time; //mcs3
-
-//out:
+    out:
     /*
      * Return task to run next...
      */
-
-//MCS
     ret.time = (is_idle_vcpu(snext->vcpu) ?
                 -1 : tslice);
     ret.task = snext->vcpu;
@@ -1677,6 +1744,7 @@ else
     CSCHED_VCPU_CHECK(ret.task);
     return ret;
 }
+
 static void
 csched_dump_vcpu(struct csched_vcpu *svc)
 {
@@ -1732,7 +1800,6 @@ csched_dump_pcpu(const struct scheduler *ops, int cpu)
 
     spc = CSCHED_PCPU(cpu);
     runq = &spc->runq;
-
 
     cpumask_scnprintf(cpustr, sizeof(cpustr), per_cpu(cpu_sibling_mask, cpu));
     printk(" sort=%d, sibling=%s, ", spc->runq_sort_last, cpustr);
