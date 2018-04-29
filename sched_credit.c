@@ -73,6 +73,11 @@
 #define MCS_HIGH_CRI_MODE  2
 
 
+#define  X_NUMERATOR       1
+#define  X_DENOMINATOR     25
+
+
+
 
 /*
  * Flags
@@ -1500,10 +1505,11 @@ MCS_tick(void *_vc)
 
 
 
+if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
 
-
+    svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
+    else
     svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
-
 
     //2
     svc->pri = CSCHED_PRI_TS_UNDER;
