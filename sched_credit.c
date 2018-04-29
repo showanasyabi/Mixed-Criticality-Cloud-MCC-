@@ -2338,7 +2338,7 @@ static  unsigned int pcpu_is_hot(int cpu)
     list_for_each( iter, runq )
     {
         iter_svc = __runq_elem(iter);
-        if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->mcc_crit_level == 2))
+        if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->MCS_criticality_level == 2))
         {
             if (iter_svc->mcc_temperature > 0)
                 return   1;
@@ -2379,7 +2379,7 @@ mcc_earliest_deadline_vcpu(int cpu)
             continue;
 
 
-        if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+        if (snext == NULL && iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
         {
 
 
@@ -2388,7 +2388,7 @@ mcc_earliest_deadline_vcpu(int cpu)
         }
 
 
-        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_deadline < snext->mcc_deadline &&  iter_svc->mcc_crit_level == 2 )
+        if ( iter_svc->pri >= snext->pri && iter_svc->MCS_deadline < snext->MCS_deadline &&  iter_svc->MCS_criticality_level == 2 )
 
 
             snext = iter_svc;
@@ -2430,7 +2430,7 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
             snext= iter_svc;
             continue;
         }
-        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+        if ( iter_svc->pri >= snext->pri && iter_svc->MCS_v_deadline < snext->MCS_v_deadline )
 
 
             snext = iter_svc;
