@@ -1501,7 +1501,7 @@ MCS_tick(void *_vc)
 
 
 
-    
+
     svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
 
 
@@ -2268,7 +2268,7 @@ csched_tick(void *_cpu)
     set_timer(&spc->ticker, NOW() + MICROSECS(prv->tick_period_us) );
 }
 
-
+/*
 static  unsigned int pcpu_is_hot(int cpu)
 {
 
@@ -2324,6 +2324,134 @@ __the_fisrt_active_HI_crit_vCPU(int cpu)
 
     return selected_svc;
 }
+
+*/
+
+static  unsigned int pcpu_is_hot(int cpu)
+{
+
+    const struct list_head * const runq = RUNQ(cpu);
+    struct list_head *iter;
+    struct csched_vcpu *  iter_svc = NULL;
+
+
+    list_for_each( iter, runq )
+    {
+        iter_svc = __runq_elem(iter);
+        if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->mcc_crit_level == 2))
+        {
+            if (iter_svc->mcc_temperature > 0)
+                return   1;
+
+        }
+
+    }
+
+
+
+
+    return 0;
+}
+
+
+
+
+
+static struct  csched_vcpu *
+mcc_earliest_deadline_vcpu(int cpu)
+{
+    struct list_head * const runq = RUNQ(cpu);
+    struct csched_vcpu *snext;
+    struct list_head *iter;
+    snext= __runq_elem(runq->next);
+    if(snext->pri == CSCHED_PRI_IDLE)
+        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
+
+    snext =NULL;
+
+
+
+    list_for_each( iter, runq )
+    {
+        struct csched_vcpu *  iter_svc = __runq_elem(iter);
+
+        if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
+            continue;
+
+
+        if (snext == NULL && iter_svc->mcc_crit_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+        {
+
+
+            snext= iter_svc;
+            continue;
+        }
+
+
+        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_deadline < snext->mcc_deadline &&  iter_svc->mcc_crit_level == 2 )
+
+
+            snext = iter_svc;
+
+
+    }
+
+
+    return snext;
+}
+
+
+static struct  csched_vcpu *
+mcc_earliest__virtual_deadline_vcpu(int cpu)
+{
+    struct list_head * const runq = RUNQ(cpu);
+    struct csched_vcpu *snext;
+    struct list_head *iter;
+    snext= __runq_elem(runq->next);
+    if(snext->pri == CSCHED_PRI_IDLE)
+        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
+
+
+
+    snext = NULL;
+
+    list_for_each( iter, runq )
+    {
+
+        struct csched_vcpu *  iter_svc = __runq_elem(iter);
+
+        if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
+            continue;
+
+        if (snext == NULL && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+        {
+
+
+            snext= iter_svc;
+            continue;
+        }
+        if ( iter_svc->pri >= snext->pri && iter_svc->mcc_v_deadline < snext->mcc_v_deadline )
+
+
+            snext = iter_svc;
+
+
+    }
+
+
+    return snext;
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 static struct task_slice
@@ -2463,9 +2591,14 @@ csched_schedule(
         spc->MCS_CPU_mode = MCS_HIGH_CRI_MODE;
     }
 
+    else
+        spc->MCS_CPU_mode = MCS_LOW_CRI_MODE;
+
+
+
     if (spc->MCS_CPU_mode == MCS_HIGH_CRI_MODE)
     {
-        snext = __the_fisrt_active_HI_crit_vCPU(cpu);
+        snext = mcc_earliest_deadline_vcpu(cpu);
         if (snext != NULL )
         {
             //__runq_remove(snext);
@@ -2473,9 +2606,9 @@ csched_schedule(
         }
         else
         {
-            //if (spc->mcs_hot == 0   )
+            snext = __runq_elem(runq->next);
 
-            spc->MCS_CPU_mode = MCS_LOW_CRI_MODE;
+            tslice = MILLISECS(3);// fixme
         }
 
 
@@ -2483,13 +2616,17 @@ csched_schedule(
 
     if (spc->MCS_CPU_mode == MCS_LOW_CRI_MODE)
     {
-        snext = __runq_elem(runq->next);
+        snext = mcc_earliest__virtual_deadline_vcpu(cpu);
         // __runq_remove(snext);
 
-        if (snext->pri == CSCHED_PRI_TS_OVER) // if its OVER it has consumed its WCET (1), so we just wanna give it a short period to run
-            tslice = MILLISECS(3); // fixme
-        else
+        if (snext != NULL ) {
             tslice = snext->MCS_WCET_1 - snext->MCS_elapsed_time;
+        }
+        else {
+            snext = __runq_elem(runq->next);
+
+            tslice = MILLISECS(3);// fixme}
+        }
 
     }
 
