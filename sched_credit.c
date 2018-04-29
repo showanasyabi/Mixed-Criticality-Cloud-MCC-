@@ -1497,6 +1497,8 @@ MCS_tick(void *_vc)
 
     //1
     svc->MCS_deadline = NOW() + MILLISECS(svc->MCS_period);
+    svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period); 
+
 
     //2
     svc->pri = CSCHED_PRI_TS_UNDER;
