@@ -561,7 +561,7 @@ __runq_insert(struct csched_vcpu *svc)
     list_for_each( iter, runq )
     {
         const struct csched_vcpu * const iter_svc = __runq_elem(iter);
-        if ( svc->pri > iter_svc->pri || ( (svc->pri == CSCHED_PRI_TS_UNDER)  & (svc-> MCS_period < iter_svc->MCS_period)  ) )
+        if ( svc->pri > iter_svc->pri )
             //if ( svc->pri > iter_svc->pri)
             break;
     }
