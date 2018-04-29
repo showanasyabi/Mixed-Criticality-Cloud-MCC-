@@ -2340,7 +2340,7 @@ static  unsigned int pcpu_is_hot(int cpu)
         iter_svc = __runq_elem(iter);
         if ( (iter_svc->pri >= CSCHED_PRI_TS_OVER)  & (iter_svc->MCS_criticality_level == 2))
         {
-            if (iter_svc->mcc_temperature > 0)
+            if (iter_svc->MCS_temperature > 0)
                 return   1;
 
         }
