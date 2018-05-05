@@ -1533,25 +1533,28 @@ MCS_tick(void *_vc)
 
     // return;
     // }
-/*    if ( (__vcpu_on_runq(svc)) )
+   if ( !__vcpu_on_runq(svc) && vcpu_runnable(vc) && !vc->is_running )
     {
-        if (prev_pri !=  svc->pri) // fixme
-        {
-            __runq_remove(svc);
-            __runq_insert(svc);
-        }
-    }
-*/
 
-    //   if ( likely(vcpu_runnable(vc)) )
+        __runq_insert(svc);
+
+        //if (prev_pri !=  svc->pri) // fixme
+       // {
+          //  __runq_remove(svc);
+          //  __runq_insert(svc);
+        //}
+    }
+
+
+    //  if ( likely(vcpu_runnable(vc)) )
     //       SCHED_STAT_CRANK(vcpu_wake_runnable);
     //   else
     //     SCHED_STAT_CRANK(vcpu_wake_not_runnable);
 
 
 
-    if ( svc->MCS_temperature >= 1)
-        spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
+    //if ( svc->MCS_temperature >= 1)
+     //   spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
 
     __runq_tickle(svc);
 
