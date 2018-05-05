@@ -1196,7 +1196,6 @@ _csched_cpu_pick(const struct scheduler *ops, struct vcpu *vc, bool_t commit)
             break;
 
 
-
     }
 
     // if ( commit && spc )
@@ -1473,7 +1472,7 @@ MCS_tick(void *_vc)
     struct csched_dom * sdom;
     unsigned int cpu = vc->processor;
     struct csched_pcpu *spc = CSCHED_PCPU(cpu);
-    int prev_pri = svc->pri;
+//    int prev_pri = svc->pri;
 
     if( is_idle_vcpu(vc))
         return;
@@ -1505,11 +1504,11 @@ MCS_tick(void *_vc)
 
 
 
-if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
+    if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
 
-    svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
+        svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
     else
-    svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
+        svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
 
     //2
     svc->pri = CSCHED_PRI_TS_UNDER;
@@ -1534,7 +1533,7 @@ if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
 
     // return;
     // }
-    if ( (__vcpu_on_runq(svc)) )
+/*    if ( (__vcpu_on_runq(svc)) )
     {
         if (prev_pri !=  svc->pri) // fixme
         {
@@ -1542,6 +1541,7 @@ if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
             __runq_insert(svc);
         }
     }
+*/
 
     //   if ( likely(vcpu_runnable(vc)) )
     //       SCHED_STAT_CRANK(vcpu_wake_runnable);
@@ -1863,18 +1863,18 @@ csched_dom_cntl(
         case XEN_DOMCTL_SCHEDOP_getinfo:
             op->u.credit.weight = sdom->mcs_wcet_1;
             op->u.credit.cap = sdom->mcs_wcet_2;
-           // op->u.credit.mcs_period = sdom->mcs_period;
-           // op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
+            op->u.credit.mcs_period = sdom->mcs_period;
+            op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
             break;
         case XEN_DOMCTL_SCHEDOP_putinfo:
 
-          /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
-                   sdom->dom->domain_id,
-                   op->u.credit.weight,
-                   op->u.credit.cap,
-                   op->u.credit.mcs_cri_level,
-                   op->u.credit.mcs_period
-            ); */
+            /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
+                     sdom->dom->domain_id,
+                     op->u.credit.weight,
+                     op->u.credit.cap,
+                     op->u.credit.mcs_cri_level,
+                     op->u.credit.mcs_period
+              ); */
 
             if ( op->u.credit.weight != (uint16_t)~0U  )
             {
@@ -1889,11 +1889,11 @@ csched_dom_cntl(
             if ( op->u.credit.cap != (uint16_t)~0U )
             sdom->mcs_wcet_2 = op->u.credit.cap;
 
-           // if ( op->u.credit.mcs_cri_level != (uint16_t)~0U  )
-          //  sdom->mcs_criticality_level = op->u.credit.mcs_cri_level;
+            if ( op->u.credit.mcs_cri_level != (uint16_t)~0U  )
+            sdom->mcs_criticality_level = op->u.credit.mcs_cri_level;
 
-          //  if ( op->u.credit.mcs_period != (uint16_t)~0U  )
-          //  sdom->mcs_period = op->u.credit.mcs_period;
+            if ( op->u.credit.mcs_period != (uint16_t)~0U  )
+            sdom->mcs_period = op->u.credit.mcs_period;
             break;
         default:
             rc = -EINVAL;
@@ -2371,7 +2371,7 @@ mcc_earliest_deadline_vcpu(int cpu)
     struct list_head *iter;
     snext= __runq_elem(runq->next);
     if(snext->pri == CSCHED_PRI_IDLE)
-        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
+        return NULL; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
 
     snext =NULL;
 
@@ -2382,19 +2382,14 @@ mcc_earliest_deadline_vcpu(int cpu)
         struct csched_vcpu *  iter_svc = __runq_elem(iter);
 
         if(iter_svc->pri < CSCHED_PRI_TS_UNDER)
-            continue;
+            break;
 
 
-        if (snext == NULL && iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
-        {
+        if (snext == NULL){
+            if  (iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+                snext= iter_svc;
 
-
-            snext= iter_svc;
-            continue;
-        }
-
-
-        if ( iter_svc->pri >= snext->pri && iter_svc->MCS_deadline < snext->MCS_deadline &&  iter_svc->MCS_criticality_level == 2 )
+        } else  if ( iter_svc->pri >= snext->pri && iter_svc->MCS_deadline < snext->MCS_deadline &&  iter_svc->MCS_criticality_level == 2 )
 
 
             snext = iter_svc;
@@ -2415,7 +2410,7 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
     struct list_head *iter;
     snext= __runq_elem(runq->next);
     if(snext->pri == CSCHED_PRI_IDLE)
-        return snext; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
+        return NULL; // fixme. should I really do this? if the vCPU at the head of runq is Idle just return it we cant do anything there is no runnable vcpu in the runq
 
 
 
@@ -2592,7 +2587,7 @@ csched_schedule(
 
     tslice = MILLISECS(3); // fixme
 
-    if (pcpu_is_hot(cpu))
+    if (pcpu_is_hot(cpu) ||scurr-> MCS_temperature > 0 )
     {
         spc->MCS_CPU_mode = MCS_HIGH_CRI_MODE;
     }
