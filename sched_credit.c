@@ -1504,11 +1504,11 @@ MCS_tick(void *_vc)
 
 
 
-    if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
+if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
 
-        svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
+    svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
     else
-        svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
+    svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
 
     //2
     svc->pri = CSCHED_PRI_TS_UNDER;
@@ -1533,28 +1533,25 @@ MCS_tick(void *_vc)
 
     // return;
     // }
-   if ( !__vcpu_on_runq(svc) && vcpu_runnable(vc) && !vc->is_running )
+/*    if ( (__vcpu_on_runq(svc)) )
     {
-
-        __runq_insert(svc);
-
-        //if (prev_pri !=  svc->pri) // fixme
-       // {
-          //  __runq_remove(svc);
-          //  __runq_insert(svc);
-        //}
+        if (prev_pri !=  svc->pri) // fixme
+        {
+            __runq_remove(svc);
+            __runq_insert(svc);
+        }
     }
+*/
 
-
-    //  if ( likely(vcpu_runnable(vc)) )
+    //   if ( likely(vcpu_runnable(vc)) )
     //       SCHED_STAT_CRANK(vcpu_wake_runnable);
     //   else
     //     SCHED_STAT_CRANK(vcpu_wake_not_runnable);
 
 
 
-    //if ( svc->MCS_temperature >= 1)
-     //   spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
+    if ( svc->MCS_temperature >= 1)
+        spc->MCS_CPU_mode= MCS_HIGH_CRI_MODE;
 
     __runq_tickle(svc);
 
@@ -1867,17 +1864,17 @@ csched_dom_cntl(
             op->u.credit.weight = sdom->mcs_wcet_1;
             op->u.credit.cap = sdom->mcs_wcet_2;
             op->u.credit.mcs_period = sdom->mcs_period;
-            op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
+             op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
             break;
         case XEN_DOMCTL_SCHEDOP_putinfo:
 
-            /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
-                     sdom->dom->domain_id,
-                     op->u.credit.weight,
-                     op->u.credit.cap,
-                     op->u.credit.mcs_cri_level,
-                     op->u.credit.mcs_period
-              ); */
+          /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
+                   sdom->dom->domain_id,
+                   op->u.credit.weight,
+                   op->u.credit.cap,
+                   op->u.credit.mcs_cri_level,
+                   op->u.credit.mcs_period
+            ); */
 
             if ( op->u.credit.weight != (uint16_t)~0U  )
             {
@@ -2389,9 +2386,9 @@ mcc_earliest_deadline_vcpu(int cpu)
 
 
         if (snext == NULL){
-            if  (iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
-                snext= iter_svc;
-
+        if  (iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+            snext= iter_svc;
+           
         } else  if ( iter_svc->pri >= snext->pri && iter_svc->MCS_deadline < snext->MCS_deadline &&  iter_svc->MCS_criticality_level == 2 )
 
 
@@ -2602,9 +2599,9 @@ csched_schedule(
 
     if (spc->MCS_CPU_mode == MCS_HIGH_CRI_MODE)
     {
-        snext = mcc_earliest_deadline_vcpu(cpu);
+       snext = mcc_earliest_deadline_vcpu(cpu);
         if (snext != NULL )
-        {
+       {
             //__runq_remove(snext);
             tslice = snext->MCS_WCET_2 - snext->MCS_elapsed_time;
         }
@@ -2624,9 +2621,9 @@ csched_schedule(
         // __runq_remove(snext);
 
         if (snext != NULL ) {
-            tslice = snext->MCS_WCET_1 - snext->MCS_elapsed_time;
-        }
-        else {
+          tslice = snext->MCS_WCET_1 - snext->MCS_elapsed_time;
+          }
+       else {
             snext = __runq_elem(runq->next);
 
             tslice = MILLISECS(3);// fixme}
