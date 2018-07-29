@@ -1504,11 +1504,11 @@ MCS_tick(void *_vc)
 
 
 
-if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
+    if(svc->MCS_criticality_level == MCS_HIGH_CRI_VCPU)
 
-    svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
+        svc->MCS_v_deadline = NOW() + MILLISECS((X_NUMERATOR * svc->MCS_period)/X_DENOMINATOR );
     else
-    svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
+        svc->MCS_v_deadline = NOW() + MILLISECS(svc->MCS_period);
 
     //2
     svc->pri = CSCHED_PRI_TS_UNDER;
@@ -1864,17 +1864,17 @@ csched_dom_cntl(
             op->u.credit.weight = sdom->mcs_wcet_1;
             op->u.credit.cap = sdom->mcs_wcet_2;
             op->u.credit.mcs_period = sdom->mcs_period;
-             op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
+            op->u.credit.mcs_cri_level= sdom-> mcs_criticality_level;
             break;
         case XEN_DOMCTL_SCHEDOP_putinfo:
 
-          /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
-                   sdom->dom->domain_id,
-                   op->u.credit.weight,
-                   op->u.credit.cap,
-                   op->u.credit.mcs_cri_level,
-                   op->u.credit.mcs_period
-            ); */
+            /*  printk("put put [%i] ---%i , ---  %i-----%i , ---  %i  \n",
+                     sdom->dom->domain_id,
+                     op->u.credit.weight,
+                     op->u.credit.cap,
+                     op->u.credit.mcs_cri_level,
+                     op->u.credit.mcs_period
+              ); */
 
             if ( op->u.credit.weight != (uint16_t)~0U  )
             {
@@ -2386,9 +2386,9 @@ mcc_earliest_deadline_vcpu(int cpu)
 
 
         if (snext == NULL){
-        if  (iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
-            snext= iter_svc;
-           
+            if  (iter_svc->MCS_criticality_level == 2 && iter_svc->pri >= CSCHED_PRI_TS_UNDER)
+                snext= iter_svc;
+
         } else  if ( iter_svc->pri >= snext->pri && iter_svc->MCS_deadline < snext->MCS_deadline &&  iter_svc->MCS_criticality_level == 2 )
 
 
@@ -2446,6 +2446,224 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
 
 
 
+static struct csched_vcpu *
+csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
+{
+    const struct csched_pcpu * const peer_pcpu = CSCHED_PCPU(peer_cpu);
+    const struct vcpu * const peer_vcpu = curr_on_cpu(peer_cpu);
+    struct csched_vcpu *speer = NULL;
+    struct list_head *iter;
+    struct vcpu *vc;
+    int min_temperature = min; // mcc
+    struct csched_vcpu *coolest_vcpu = NULL;  // mcc
+
+
+    /*
+     * Don't steal from an idle CPU's runq because it's about to
+     * pick up work from it itself.
+     */
+    if ( peer_pcpu != NULL && !is_idle_vcpu(peer_vcpu) )
+    {
+        list_for_each( iter, &peer_pcpu->runq )
+        {
+            speer = __runq_elem(iter);
+
+            /*
+             * If next available VCPU here is not of strictly higher
+             * priority than ours, this PCPU is useless to us.
+             */
+            if ( speer->pri <= CSCHED_PRI_IDLE )  //mcc
+
+                break;
+
+
+            if (speer->MCS_criticality_level == 2) // mcc
+                continue;
+
+            if (speer-> MCS_temperature >= min) //mcc
+                continue;
+
+
+            /* Is this VCPU runnable on our PCPU? */
+            vc = speer->vcpu;
+            BUG_ON( is_idle_vcpu(vc) );
+
+            /*
+             * If the vcpu has no useful soft affinity, skip this vcpu.
+             * In fact, what we want is to check if we have any "soft-affine
+             * work" to steal, before starting to look at "hard-affine work".
+             *
+             * Notice that, if not even one vCPU on this runq has a useful
+             * soft affinity, we could have avoid considering this runq for
+             * a soft balancing step in the first place. This, for instance,
+             * can be implemented by taking note of on what runq there are
+             * vCPUs with useful soft affinities in some sort of bitmap
+             * or counter.
+             */
+            if ( balance_step == CSCHED_BALANCE_SOFT_AFFINITY
+                 && !__vcpu_has_soft_affinity(vc, vc->cpu_hard_affinity) )
+                continue;
+
+            csched_balance_cpumask(vc, balance_step, cpumask_scratch_cpu(cpu));
+            if ( __csched_vcpu_is_migrateable(vc, cpu,
+                                              cpumask_scratch_cpu(cpu)) )
+            {
+                /* We got a candidate. Grab it! */
+                TRACE_3D(TRC_CSCHED_STOLEN_VCPU, peer_cpu,
+                         vc->domain->domain_id, vc->vcpu_id);
+                SCHED_VCPU_STAT_CRANK(speer, migrate_q);
+                SCHED_STAT_CRANK(migrate_queued);
+                WARN_ON(vc->is_urgent);
+
+                coolest_vcpu= speer;
+                min= speer->MCS_temperature;
+
+
+              //  __runq_remove(speer);  // mcc
+                // vc->processor = cpu;  // mcc
+               // return speer;   // mcc
+
+
+            }
+        }
+    }
+
+    SCHED_STAT_CRANK(steal_peer_idle);
+    return coolest_vcpu;
+}
+
+static struct csched_vcpu *
+csched_load_balance(struct csched_private *prv, int cpu,
+                    struct csched_vcpu *snext, bool_t *stolen)
+{
+    struct cpupool *c = per_cpu(cpupool, cpu);
+    struct csched_vcpu *speer;
+    cpumask_t workers;
+    cpumask_t *online;
+    int peer_cpu, peer_node, bstep;
+    int node = cpu_to_node(cpu);
+
+
+    struct csched_vcpu *coolest_vCPU = NULL;
+    int min_temparture = -1;
+
+
+    BUG_ON( cpu != snext->vcpu->processor );
+    online = cpupool_online_cpumask(c);
+
+    /*
+     * If this CPU is going offline, or is not (yet) part of any cpupool
+     * (as it happens, e.g., during cpu bringup), we shouldn't steal work.
+     */
+    if ( unlikely(!cpumask_test_cpu(cpu, online) || c == NULL) )
+        goto out;
+
+    if ( snext->pri == CSCHED_PRI_IDLE )
+        SCHED_STAT_CRANK(load_balance_idle);
+    else if ( snext->pri == CSCHED_PRI_TS_OVER )
+        SCHED_STAT_CRANK(load_balance_over);
+    else
+        SCHED_STAT_CRANK(load_balance_other);
+
+    /*
+     * Let's look around for work to steal, taking both hard affinity
+     * and soft affinity into account. More specifically, we check all
+     * the non-idle CPUs' runq, looking for:
+     *  1. any "soft-affine work" to steal first,
+     *  2. if not finding anything, any "hard-affine work" to steal.
+     */
+    for_each_csched_balance_step( bstep )
+    {
+        /*
+         * We peek at the non-idling CPUs in a node-wise fashion. In fact,
+         * it is more likely that we find some affine work on our same
+         * node, not to mention that migrating vcpus within the same node
+         * could well expected to be cheaper than across-nodes (memory
+         * stays local, there might be some node-wide cache[s], etc.).
+         */
+        peer_node = node;
+        do
+        {
+            /* Find out what the !idle are in this node */
+            cpumask_andnot(&workers, online, prv->idlers);
+            cpumask_and(&workers, &workers, &node_to_cpumask(peer_node));
+            __cpumask_clear_cpu(cpu, &workers);
+
+            peer_cpu = cpumask_first(&workers);
+            if ( peer_cpu >= nr_cpu_ids )
+                goto next_node;
+            do
+            {
+                struct csched_pcpu *spc = CSCHED_PCPU(peer_cpu); //MCS
+                /*
+                 * Get ahold of the scheduler lock for this peer CPU.
+                 *
+                 * Note: We don't spin on this lock but simply try it. Spinning
+                 * could cause a deadlock if the peer CPU is also load
+                 * balancing and trying to lock this CPU.
+                 */
+                spinlock_t *lock = pcpu_schedule_trylock(peer_cpu);
+
+                if ( !lock )
+                {
+                    SCHED_STAT_CRANK(steal_trylock_failed);
+                    peer_cpu = cpumask_cycle(peer_cpu, &workers);
+                    continue;
+                }
+
+
+                if(spc->MCS_CPU_mode == MCS_LOW_CRI_MODE )
+                {
+
+                    peer_cpu = cpumask_cycle(peer_cpu, &workers);
+                    continue;
+
+                }
+
+                /* Any work over there to steal? */
+                speer = cpumask_test_cpu(peer_cpu, online) ?
+                        csched_runq_steal(peer_cpu, cpu, min_temparture , bstep) : NULL;
+                pcpu_schedule_unlock(lock, peer_cpu);
+
+                /* As soon as one vcpu is found, balancing ends */
+                if ( speer != NULL )
+                {
+                    *stolen = 1;
+
+                    if ( speer->MCS_temperature < min_temparture)
+                    {
+                        min_temparture = speer->MCS_temperature;
+                        coolest_vCPU = speer;
+
+
+
+                    }
+
+                    //return speer;
+                }
+
+                peer_cpu = cpumask_cycle(peer_cpu, &workers);
+
+            } while( peer_cpu != cpumask_first(&workers) );
+
+            next_node:
+            peer_node = cycle_node(peer_node, node_online_map);
+        } while( peer_node != node );
+    }
+
+    out:
+
+    if( coolest_vCPU != NULL)
+
+        __runq_remove(coolest_vCPU);  // mcc
+    coolest_vCPU-> vc->processor = cpu;  // mcc
+
+        return coolest_vCPU;
+
+    /* Failed to find more important work elsewhere... */
+    //__runq_remove(snext);
+    return snext;
+}
 
 
 
@@ -2565,6 +2783,10 @@ csched_schedule(
     else
         BUG_ON( is_idle_vcpu(current) || list_empty(runq) );
 
+
+    csched_load_balance();
+
+
     // snext = __runq_elem(runq->next);
     // ret.migrated = 0;
 
@@ -2599,9 +2821,9 @@ csched_schedule(
 
     if (spc->MCS_CPU_mode == MCS_HIGH_CRI_MODE)
     {
-       snext = mcc_earliest_deadline_vcpu(cpu);
+        snext = mcc_earliest_deadline_vcpu(cpu);
         if (snext != NULL )
-       {
+        {
             //__runq_remove(snext);
             tslice = snext->MCS_WCET_2 - snext->MCS_elapsed_time;
         }
@@ -2621,9 +2843,9 @@ csched_schedule(
         // __runq_remove(snext);
 
         if (snext != NULL ) {
-          tslice = snext->MCS_WCET_1 - snext->MCS_elapsed_time;
-          }
-       else {
+            tslice = snext->MCS_WCET_1 - snext->MCS_elapsed_time;
+        }
+        else {
             snext = __runq_elem(runq->next);
 
             tslice = MILLISECS(3);// fixme}
