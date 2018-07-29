@@ -2454,7 +2454,6 @@ csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
     struct csched_vcpu *speer = NULL;
     struct list_head *iter;
     struct vcpu *vc;
-    int min_temperature = min; // mcc
     struct csched_vcpu *coolest_vcpu = NULL;  // mcc
 
 
@@ -2656,7 +2655,7 @@ csched_load_balance(struct csched_private *prv, int cpu,
     if( coolest_vCPU != NULL)
 
         __runq_remove(coolest_vCPU);  // mcc
-    coolest_vCPU-> vc->processor = cpu;  // mcc
+    coolest_vCPU->vcpu->processor = cpu;  // mcc
 
         return coolest_vCPU;
 
@@ -2784,7 +2783,7 @@ csched_schedule(
         BUG_ON( is_idle_vcpu(current) || list_empty(runq) );
 
 
-    csched_load_balance();
+    csched_load_balance(prv, cpu, snext, &ret.migrated);
 
 
     // snext = __runq_elem(runq->next);
