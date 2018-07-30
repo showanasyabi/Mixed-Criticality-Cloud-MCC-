@@ -2444,7 +2444,7 @@ mcc_earliest__virtual_deadline_vcpu(int cpu)
 }
 
 
-
+/*
 
 static struct csched_vcpu *
 csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
@@ -2457,20 +2457,14 @@ csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
     struct csched_vcpu *coolest_vcpu = NULL;  // mcc
 
 
-    /*
-     * Don't steal from an idle CPU's runq because it's about to
-     * pick up work from it itself.
-     */
+
     if ( peer_pcpu != NULL && !is_idle_vcpu(peer_vcpu) )
     {
         list_for_each( iter, &peer_pcpu->runq )
         {
             speer = __runq_elem(iter);
 
-            /*
-             * If next available VCPU here is not of strictly higher
-             * priority than ours, this PCPU is useless to us.
-             */
+
             if ( speer->pri <= CSCHED_PRI_IDLE )  //mcc
 
                 break;
@@ -2483,22 +2477,11 @@ csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
                 continue;
 
 
-            /* Is this VCPU runnable on our PCPU? */
+
             vc = speer->vcpu;
             BUG_ON( is_idle_vcpu(vc) );
 
-            /*
-             * If the vcpu has no useful soft affinity, skip this vcpu.
-             * In fact, what we want is to check if we have any "soft-affine
-             * work" to steal, before starting to look at "hard-affine work".
-             *
-             * Notice that, if not even one vCPU on this runq has a useful
-             * soft affinity, we could have avoid considering this runq for
-             * a soft balancing step in the first place. This, for instance,
-             * can be implemented by taking note of on what runq there are
-             * vCPUs with useful soft affinities in some sort of bitmap
-             * or counter.
-             */
+
             if ( balance_step == CSCHED_BALANCE_SOFT_AFFINITY
                  && !__vcpu_has_soft_affinity(vc, vc->cpu_hard_affinity) )
                 continue;
@@ -2507,7 +2490,7 @@ csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
             if ( __csched_vcpu_is_migrateable(vc, cpu,
                                               cpumask_scratch_cpu(cpu)) )
             {
-                /* We got a candidate. Grab it! */
+
                 TRACE_3D(TRC_CSCHED_STOLEN_VCPU, peer_cpu,
                          vc->domain->domain_id, vc->vcpu_id);
                 SCHED_VCPU_STAT_CRANK(speer, migrate_q);
@@ -2531,6 +2514,7 @@ csched_runq_steal(int peer_cpu, int cpu, int min, int balance_step)
     return coolest_vcpu;
 }
 
+*/
 static struct csched_vcpu *
 csched_load_balance(struct csched_private *prv, int cpu,
                     struct csched_vcpu *snext, bool_t *stolen)
@@ -2620,8 +2604,9 @@ csched_load_balance(struct csched_private *prv, int cpu,
                 }
 
                 /* Any work over there to steal? */
-                speer = cpumask_test_cpu(peer_cpu, online) ?
-                        csched_runq_steal(peer_cpu, cpu, min_temparture , bstep) : NULL;
+                speer =  NULL;
+               // speer = cpumask_test_cpu(peer_cpu, online) ?
+                 //       csched_runq_steal(peer_cpu, cpu, min_temparture , bstep) : NULL;
                 pcpu_schedule_unlock(lock, peer_cpu);
 
                 /* As soon as one vcpu is found, balancing ends */
@@ -2654,14 +2639,16 @@ csched_load_balance(struct csched_private *prv, int cpu,
 
     if( coolest_vCPU != NULL)
 
+{
         __runq_remove(coolest_vCPU);  // mcc
     coolest_vCPU->vcpu->processor = cpu;  // mcc
+}
 
         return coolest_vCPU;
 
     /* Failed to find more important work elsewhere... */
     //__runq_remove(snext);
-    return snext;
+    //return snext;
 }
 
 
@@ -2803,15 +2790,17 @@ csched_schedule(
      */
     // if ( snext->pri > CSCHED_PRI_TS_OVER ) MCS
 
+
+
+
     snext = __runq_elem(runq->next);
 
 
     sbalance = csched_load_balance(prv, cpu, snext, &ret.migrated);
+    if (sbalance != NULL &&  vcpu_runnable(current) )
 
     __runq_insert(sbalance);
 
-    if ( vcpu_runnable(current) )
-        snext  =    __runq_insert(scurr);
 
     // snext = CSCHED_VCPU(idle_vcpu[cpu]);
     ret.migrated = 0;
