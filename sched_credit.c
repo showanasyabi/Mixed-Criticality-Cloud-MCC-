@@ -2681,6 +2681,8 @@ csched_schedule(
     struct csched_vcpu * const scurr = CSCHED_VCPU(current);
     struct csched_private *prv = CSCHED_PRIV(ops);
     struct csched_vcpu *snext;
+    struct csched_vcpu *sbalance;
+
     struct task_slice ret;
     s_time_t runtime, tslice;
     struct csched_pcpu *spc = CSCHED_PCPU(cpu); //MCS
@@ -2783,7 +2785,6 @@ csched_schedule(
         BUG_ON( is_idle_vcpu(current) || list_empty(runq) );
 
 
-    csched_load_balance(prv, cpu, snext, &ret.migrated);
 
 
     // snext = __runq_elem(runq->next);
@@ -2803,6 +2804,15 @@ csched_schedule(
     // if ( snext->pri > CSCHED_PRI_TS_OVER ) MCS
 
     snext = __runq_elem(runq->next);
+
+
+    sbalance = csched_load_balance(prv, cpu, snext, &ret.migrated);
+
+    __runq_insert(sbalance);
+
+    if ( vcpu_runnable(current) )
+        snext  =    __runq_insert(scurr);
+
     // snext = CSCHED_VCPU(idle_vcpu[cpu]);
     ret.migrated = 0;
 
